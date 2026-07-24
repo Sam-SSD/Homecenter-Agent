@@ -530,6 +530,10 @@ def _ping() -> int:
     except Exception as e:  # noqa: BLE001
         print(f"  ninguna llave sirvio: {e}")
         return 1
+    if "--tools" not in sys.argv:
+        print("\n(para probar el ida y vuelta con herramienta: python -m src.llm --tools\n"
+              " cuesta 2 requests mas del primer modelo, y el cupo gratis es 20/dia)")
+        return 0
     return _ping_tools()
 
 

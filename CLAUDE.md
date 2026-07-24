@@ -46,8 +46,9 @@ El Q&A (`src/qa.py`) es la Ãºnica puerta de salida de texto: sin fuente respon
 ## Comandos
 ```bash
 Copy-Item .env.example .env      # poner GEMINI_API_KEYS=llave1,llave2,llave3
-python -m src.llm                # verifica cada llave
-python -m src.llm --modelos      # que modelos soporta tu llave
+python -m src.llm                # verifica cada llave (barato)
+python -m src.llm --tools        # + ida y vuelta con herramienta (2 requests, una vez)
+python -m src.llm --modelos      # que modelos soporta tu llave (gratis)
 
 # datos (requiere red; hacerlo la noche anterior)
 python -m ingest.fetch_all --etapa 1                  # 3 categorÃ­as, desbloquea al equipo
@@ -97,8 +98,9 @@ streamlit run app.py
 - Los modelos en `.env` (`GEMINI_MODELOS`): ya verificados el 24-jul-2026 contra
   la llave real (3.6-flash, 3.5-flash-lite, 3.1-flash-lite, 3-flash-preview).
   2.0 y 2.5 estan apagados. Si cambia la llave, corre `python -m src.llm --modelos`.
-- `python -m src.llm` ahora hace una ida y vuelta con herramienta: si eso pasa,
-  los loops corren. El ping de un solo turno no cubria el bug de las firmas.
+- `python -m src.llm --tools` hace una ida y vuelta con herramienta: si eso pasa,
+  los loops corren (el ping de un solo turno no cubria el bug de las firmas).
+  **Cuesta 2 requests del primer modelo, de 20 que hay al dia: corrolo UNA vez.**
 - **Conseguir mas llaves.** Con una sola, una corrida `--con-llm` casi agota el
   dia. Cada llave del equipo multiplica el cupo (20/dia x modelo x llave).
 - El parÃ¡metro de paginaciÃ³n de las categorÃ­as: **no confirmado**. Por eso
