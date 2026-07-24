@@ -61,6 +61,8 @@ class Llave:
     inhabilitada: bool = False
     motivo: str = ""
     libre_desde: float = 0.0
+    # cuota por modelo: {modelo: timestamp en que vuelve a estar libre}
+    modelos_frios: dict = field(default_factory=dict)
 
     @property
     def disponible(self) -> bool:
@@ -70,6 +72,19 @@ class Llave:
         self.libre_desde = time.time() + segundos
         self.fallos += 1
         self.motivo = motivo
+
+    def enfriar_modelo(self, modelo: str, segundos: int, motivo: str) -> None:
+        """Cuota agotada de UN modelo. En el tier gratuito el limite es por
+        modelo y por dia, asi que la llave sigue sirviendo para los demas de la
+        cadena: enfriarla entera dejaria sin probar el resto."""
+        self.modelos_frios[modelo] = time.time() + segundos
+        self.fallos += 1
+        self.motivo = f"{motivo} ({modelo})"
+
+    def modelo_disponible(self, modelo: str) -> bool:
+        return (not self.inhabilitada
+                and time.time() >= max(self.libre_desde,
+                                       self.modelos_frios.get(modelo, 0.0)))
 
     def matar(self, motivo: str) -> None:
         self.inhabilitada = True
@@ -386,7 +401,9 @@ def generar(system: str, historial: list[dict], tools: list[dict] | None = None,
             vivas = [k for k in POOL if not k.inhabilitada]
             if not vivas:
                 raise
-            falta = min(k.libre_desde for k in vivas) - time.time()
+            # el par (llave, modelo) que vuelve antes, no solo la llave
+            falta = min(max(k.libre_desde, k.modelos_frios.get(m, 0.0))
+                        for k in vivas for m in MODELOS) - time.time()
             if falta <= 0 or esperado + falta > ESPERA_MAX_S:
                 raise
             esperado += falta
@@ -410,7 +427,7 @@ def _rondas(system: str, historial: list[dict], tools: list[dict],
     for modelo in MODELOS:
         modelo_roto = False
         for llave in POOL:
-            if not llave.disponible:
+            if not llave.modelo_disponible(modelo):
                 continue
             intentos += 1
             try:
@@ -440,7 +457,9 @@ def _rondas(system: str, historial: list[dict], tools: list[dict],
                 elif clase == "llave_muerta":
                     llave.matar(clase)
                 elif clase == "cuota":
-                    llave.enfriar(_demora_sugerida(e) or COOLDOWN_S, clase)
+                    # solo este modelo: la llave sigue viva para el resto
+                    llave.enfriar_modelo(modelo, _demora_sugerida(e) or COOLDOWN_S,
+                                         clase)
                 elif clase == "modelo_malo":
                     modelo_roto = True
                     break

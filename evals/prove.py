@@ -201,8 +201,10 @@ def c9_fallback_llaves() -> None:
         chequeo("modelo inexistente -> pasa al siguiente modelo",
                 intentos[0][0] == "modelo-fantasma" and r.modelo == "modelo-bueno",
                 f"{len(intentos)} intentos: {intentos}")
+        # el 429 enfria el par (llave, modelo): la llave sigue viva para otros
         chequeo("cuota agotada (429) -> rota a la siguiente llave",
-                llm.POOL[0].motivo == "cuota" and not llm.POOL[0].disponible)
+                llm.POOL[0].motivo.startswith("cuota")
+                and not llm.POOL[0].modelo_disponible("modelo-bueno"))
         chequeo("error transitorio (503) -> rota y enfria brevemente",
                 llm.POOL[1].motivo == "transitorio")
         chequeo("responde con la tercera llave", r.llave == "key3:...tres", r.texto)
@@ -269,6 +271,29 @@ def c9_fallback_llaves() -> None:
                     "se disfrazo de 'sin llaves' y quemo el pool")
         chequeo("un 400 no inhabilita las llaves sanas",
                 all(not k.inhabilitada for k in llm.POOL))
+
+        # --- cuota del tier gratuito: es POR MODELO, no por llave ---
+        # Con una sola llave, enfriarla entera ante un 429 saltaba el resto de
+        # la cadena con 'continue' y agotaba 4 modelos en 1 intento.
+        llm.POOL = [llm.Llave("k-sola", "key1:...sola")]
+        llm.MODELOS = ["modelo-sin-cupo", "modelo-con-cupo"]
+        probados: list[str] = []
+
+        def cuota_por_modelo(llave, modelo, *a, **k):
+            probados.append(modelo)
+            if modelo == "modelo-sin-cupo":
+                raise RuntimeError("429 RESOURCE_EXHAUSTED quota "
+                                   "{'retryDelay': '31s'}")
+            return llm.Respuesta(texto="OK", modelo=modelo, llave=llave.etiqueta)
+
+        llm._llamar_gemini = cuota_por_modelo
+        r0 = llm.generar("", [{"rol": "usuario", "texto": "x"}], [], 16)
+        chequeo("429 en un modelo -> prueba el siguiente con la misma llave",
+                r0.modelo == "modelo-con-cupo" and len(probados) == 2,
+                f"probados={probados}")
+        chequeo("un 429 por modelo no enfria la llave entera",
+                llm.POOL[0].disponible and not llm.POOL[0].modelo_disponible(
+                    "modelo-sin-cupo"))
 
         # --- una sola llave enfriando: esperar es mejor que rendirse ---
         guardado_espera = llm.ESPERA_MAX_S
