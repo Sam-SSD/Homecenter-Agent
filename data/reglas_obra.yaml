@@ -1,0 +1,129 @@
+# Reglas de cuantificacion de obra para bano.
+# `verificada: true` SOLO si la fuente es una guia real de Homecenter en data/guias.json.
+# Toda regla con verificada:false se muestra en amarillo en la UI y el verificador la marca.
+# `formula` se evalua con las variables del Espacio + los coeficientes de la propia regla.
+
+piso_ceramica:
+  concepto: ceramica de piso
+  formula: area_piso * (1 + merma)
+  unidad: m2
+  prioridad: 1
+  coeficientes:
+    merma: 0.10
+  fuente: practica estandar de instalacion
+  verificada: false
+
+enchape_pared:
+  concepto: ceramica de pared
+  formula: max(perimetro * altura_enchape_m - descuento_puerta * puertas, 0) * (1 + merma)
+  unidad: m2
+  prioridad: 2
+  coeficientes:
+    merma: 0.10
+    descuento_puerta: 1.6
+  fuente: practica estandar de instalacion
+  verificada: false
+
+adhesivo:
+  concepto: pegante para ceramica
+  formula: (area_piso * (1 + merma) + max(perimetro * altura_enchape_m - descuento_puerta * puertas, 0)) * kg_por_m2
+  unidad: kg
+  prioridad: 1
+  coeficientes:
+    merma: 0.10
+    descuento_puerta: 1.6
+    kg_por_m2: 5.0
+  fuente: leer del rotulo del producto seleccionado
+  verificada: false
+
+boquilla:
+  concepto: boquilla
+  formula: (area_piso + max(perimetro * altura_enchape_m - descuento_puerta * puertas, 0)) * kg_por_m2
+  unidad: kg
+  prioridad: 2
+  coeficientes:
+    descuento_puerta: 1.6
+    kg_por_m2: 0.5
+  fuente: leer del rotulo del producto seleccionado
+  verificada: false
+
+pintura_cielo:
+  concepto: pintura
+  formula: (area_piso * capas) / rendimiento_galon
+  unidad: galon
+  prioridad: 2
+  coeficientes:
+    capas: 2
+    rendimiento_galon: 30.0
+  fuente: leer rendimiento del PDP del producto
+  verificada: false
+
+sanitario:
+  concepto: sanitario
+  formula: unidades
+  unidad: Und
+  prioridad: 1
+  coeficientes:
+    unidades: 1
+  fuente: una unidad por bano
+  verificada: false
+
+lavamanos:
+  concepto: lavamanos
+  formula: unidades
+  unidad: Und
+  prioridad: 1
+  coeficientes:
+    unidades: 1
+  fuente: una unidad por bano
+  verificada: false
+
+griferia_lavamanos:
+  concepto: griferia de lavamanos
+  formula: unidades
+  unidad: Und
+  prioridad: 2
+  coeficientes:
+    unidades: 1
+  fuente: una unidad por lavamanos
+  verificada: false
+
+griferia_ducha:
+  concepto: griferia de ducha
+  formula: unidades * incluye_ducha
+  unidad: Und
+  prioridad: 2
+  coeficientes:
+    unidades: 1
+  fuente: una unidad si el bano tiene ducha
+  verificada: false
+
+mueble_bano:
+  concepto: mueble de bano
+  formula: unidades
+  unidad: Und
+  prioridad: 3
+  coeficientes:
+    unidades: 1
+  fuente: opcional, mejora almacenamiento
+  verificada: false
+
+espejo:
+  concepto: espejo
+  formula: unidades
+  unidad: Und
+  prioridad: 3
+  coeficientes:
+    unidades: 1
+  fuente: opcional
+  verificada: false
+
+division_ducha:
+  concepto: division de ducha
+  formula: unidades * incluye_ducha
+  unidad: Und
+  prioridad: 3
+  coeficientes:
+    unidades: 1
+  fuente: opcional si hay ducha
+  verificada: false
