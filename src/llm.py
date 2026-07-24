@@ -125,19 +125,33 @@ CUOTA = ("resource_exhausted", "quota", "rate limit", "429", "too many requests"
 MODELO_MALO = ("not found", "404", "is not supported", "not_found", "unsupported model")
 TRANSITORIO = ("500", "502", "503", "504", "internal", "unavailable", "overloaded",
                "deadline", "timeout", "connection")
+# Peticion mal formada: la llave esta sana, el bug es nuestro. Rotar llaves no
+# arregla nada y entierra el error real bajo "agotadas N llaves". Sin el numero
+# 400 pelado: aparece dentro de cuerpos de error de cuota.
+PETICION_MALA = ("invalid_argument", "failed_precondition")
+# Caso especial de Gemini 3.x: reintentar sin las firmas si el modelo las rechaza.
+FIRMA = ("thought_signature", "thought signature")
 
 
 def _clasificar(e: Exception) -> str:
     t = f"{type(e).__name__} {e}".lower()
+    if any(s in t for s in FIRMA):
+        return "firma"
     if any(s in t for s in FATAL_LLAVE):
         return "llave_muerta"
     if any(s in t for s in CUOTA):
         return "cuota"
     if any(s in t for s in MODELO_MALO):
         return "modelo_malo"
+    if any(s in t for s in PETICION_MALA):
+        return "peticion_mala"
     if any(s in t for s in TRANSITORIO):
         return "transitorio"
     return "desconocido"
+
+
+class PeticionMalFormada(RuntimeError):
+    """El proveedor rechazo la peticion (400). Bug nuestro, no de la llave."""
 
 
 # ------------------------------------------------------------ respuesta normalizada
@@ -147,6 +161,11 @@ class Llamada:
     nombre: str
     args: dict
     id: str = ""
+    # Gemini 3.x firma cada function_call y exige que la firma vuelva intacta en
+    # el siguiente turno. Es opaca: no se inspecciona ni se serializa a la traza
+    # (son bytes, romperian el json.dumps de loop.py). Va fuera de `args` a
+    # proposito. Otros proveedores la dejan en None y la ignoran.
+    firma: object = None
 
 
 @dataclass
@@ -225,12 +244,15 @@ def _cliente_gemini(llave: str):
     return _clientes[llave]
 
 
-def _contenidos_gemini(historial: list[dict]):
+def _contenidos_gemini(historial: list[dict], sin_firmas: bool = False):
     """historial neutro -> Content de Gemini.
 
     Cada entrada: {"rol": "usuario"|"modelo", "texto": str}
                   {"rol": "modelo", "llamadas": [Llamada]}
                   {"rol": "usuario", "resultados": [{"nombre":..., "salida": str}]}
+
+    `sin_firmas` descarta los thought_signature: las firmas pertenecen al modelo
+    que las emitio, asi que al caer a otro modelo de la cadena hay que soltarlas.
     """
     from google.genai import types
     out = []
@@ -240,8 +262,10 @@ def _contenidos_gemini(historial: list[dict]):
         if m.get("texto"):
             partes.append(types.Part(text=m["texto"]))
         for ll in m.get("llamadas") or []:
-            partes.append(types.Part(function_call=types.FunctionCall(
-                name=ll.nombre, args=ll.args)))
+            fc = types.FunctionCall(name=ll.nombre, args=ll.args)
+            firma = None if sin_firmas else getattr(ll, "firma", None)
+            partes.append(types.Part(function_call=fc, thought_signature=firma)
+                          if firma else types.Part(function_call=fc))
         for r in m.get("resultados") or []:
             partes.append(types.Part.from_function_response(
                 name=r["nombre"], response={"resultado": r["salida"]}))
@@ -251,7 +275,8 @@ def _contenidos_gemini(historial: list[dict]):
 
 
 def _llamar_gemini(llave: Llave, modelo: str, system: str,
-                   historial: list[dict], tools: list[dict], max_tokens: int) -> Respuesta:
+                   historial: list[dict], tools: list[dict], max_tokens: int,
+                   sin_firmas: bool = False) -> Respuesta:
     from google.genai import types
     cliente = _cliente_gemini(llave.valor)
     cfg = types.GenerateContentConfig(
@@ -261,7 +286,7 @@ def _llamar_gemini(llave: Llave, modelo: str, system: str,
         temperature=0.2,
     )
     r = cliente.models.generate_content(
-        model=modelo, contents=_contenidos_gemini(historial), config=cfg)
+        model=modelo, contents=_contenidos_gemini(historial, sin_firmas), config=cfg)
 
     textos, llamadas = [], []
     for cand in (r.candidates or []):
@@ -270,8 +295,10 @@ def _llamar_gemini(llave: Llave, modelo: str, system: str,
                 textos.append(p.text)
             fc = getattr(p, "function_call", None)
             if fc is not None and getattr(fc, "name", None):
+                # la firma cuelga de la Part, no del FunctionCall
                 llamadas.append(Llamada(nombre=fc.name, args=dict(fc.args or {}),
-                                        id=fc.name))
+                                        id=fc.name,
+                                        firma=getattr(p, "thought_signature", None)))
     return Respuesta(texto="\n".join(textos).strip(), llamadas=llamadas, crudo=r,
                      modelo=modelo, llave=llave.etiqueta)
 
@@ -333,6 +360,9 @@ def generar(system: str, historial: list[dict], tools: list[dict] | None = None,
             "no hay llaves. Pon GEMINI_API_KEYS=llave1,llave2 en .env")
 
     intentos, ultimo = 0, None
+    # Una vez que un modelo rechaza las firmas, se sueltan para el resto de la
+    # llamada: pertenecen al modelo que las emitio y no viajan entre modelos.
+    sin_firmas = False
     for modelo in MODELOS:
         modelo_roto = False
         for llave in POOL:
@@ -341,7 +371,8 @@ def generar(system: str, historial: list[dict], tools: list[dict] | None = None,
             intentos += 1
             try:
                 llave.usos += 1
-                r = _llamar_gemini(llave, modelo, system, historial, tools, max_tokens)
+                r = _llamar_gemini(llave, modelo, system, historial, tools,
+                                   max_tokens, sin_firmas)
                 r.intentos = intentos
                 return r
             except Exception as e:  # noqa: BLE001
@@ -350,13 +381,30 @@ def generar(system: str, historial: list[dict], tools: list[dict] | None = None,
                 if traza:
                     traza.paso("llm", "fallback",
                                f"{modelo} / {llave.etiqueta}: {clase} - {str(e)[:70]}")
-                if clase == "llave_muerta":
+                if clase == "firma" and not sin_firmas:
+                    # reintenta ya mismo contra la misma llave, sin firmas
+                    sin_firmas = True
+                    intentos += 1
+                    try:
+                        r = _llamar_gemini(llave, modelo, system, historial, tools,
+                                           max_tokens, True)
+                        r.intentos = intentos
+                        return r
+                    except Exception as e2:  # noqa: BLE001
+                        ultimo = e2
+                        llave.enfriar(5, "firma")
+                elif clase == "llave_muerta":
                     llave.matar(clase)
                 elif clase == "cuota":
                     llave.enfriar(COOLDOWN_S, clase)
                 elif clase == "modelo_malo":
                     modelo_roto = True
                     break
+                elif clase == "peticion_mala":
+                    # rotar llaves no arregla un 400: aborta con el error crudo
+                    raise PeticionMalFormada(
+                        f"{modelo} rechazo la peticion (bug nuestro, no de la "
+                        f"llave): {e}") from e
                 else:
                     llave.enfriar(5, clase)
         if modelo_roto:
@@ -416,9 +464,44 @@ def _ping() -> int:
     try:
         r = generar("", hist, [], 32)
         print(f"  respondio {r.llave} con {r.modelo} en {r.intentos} intento(s): {r.texto[:40]!r}")
-        return 0
     except Exception as e:  # noqa: BLE001
         print(f"  ninguna llave sirvio: {e}")
+        return 1
+    return _ping_tools()
+
+
+def _ping_tools() -> int:
+    """Ida y vuelta con herramienta: dos turnos, con el resultado devuelto.
+
+    El ping de un solo turno no cubre esta ruta, y es donde vive la clase de bug
+    de los thought_signature de Gemini 3.x: el 400 solo aparece en el turno 2,
+    cuando el historial trae de vuelta un function_call.
+    """
+    print("\nprueba de ida y vuelta con herramienta (2 turnos):")
+    tools = [{"name": "sumar", "description": "Suma dos enteros.",
+              "input_schema": {"type": "object", "properties": {
+                  "a": {"type": "integer", "description": "primer sumando"},
+                  "b": {"type": "integer", "description": "segundo sumando"}},
+                  "required": ["a", "b"]}}]
+    hist = [{"rol": "usuario",
+             "texto": "Cuanto es 2+2? Usa la herramienta sumar y luego dime el resultado."}]
+    try:
+        r1 = generar("Usa las herramientas disponibles.", hist, tools, 256)
+        if not r1.llamadas:
+            print(f"  [AVISO] el modelo no llamo la herramienta: {r1.texto[:60]!r}")
+            print("          no se pudo cubrir el turno 2; revisalo con evals.prove --con-llm")
+            return 0
+        ll = r1.llamadas[0]
+        firma = "con firma" if getattr(ll, "firma", None) else "sin firma"
+        print(f"  turno 1: {ll.nombre}({ll.args}) [{firma}]")
+        hist.append({"rol": "modelo", "texto": r1.texto, "llamadas": r1.llamadas})
+        hist.append({"rol": "usuario", "resultados": [
+            {"nombre": ll.nombre, "id": ll.id, "salida": '{"resultado": 4}'}]})
+        r2 = generar("Usa las herramientas disponibles.", hist, tools, 256)
+        print(f"  turno 2: OK -> {(r2.texto or '(sin texto)')[:60]!r}")
+        return 0
+    except Exception as e:  # noqa: BLE001
+        print(f"  [FALLA] {_clasificar(e)}: {str(e)[:200]}")
         return 1
 
 

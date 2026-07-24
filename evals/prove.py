@@ -185,7 +185,8 @@ def c9_fallback_llaves() -> None:
         llm.MODELOS = ["modelo-fantasma", "modelo-bueno"]
         intentos: list[tuple[str, str]] = []
 
-        def falso(llave, modelo, system, historial, tools, max_tokens):
+        def falso(llave, modelo, system, historial, tools, max_tokens,
+                  sin_firmas=False):
             intentos.append((modelo, llave.etiqueta))
             if modelo == "modelo-fantasma":
                 raise RuntimeError("404 models/modelo-fantasma is not found")
@@ -206,6 +207,70 @@ def c9_fallback_llaves() -> None:
                 llm.POOL[1].motivo == "transitorio")
         chequeo("responde con la tercera llave", r.llave == "key3:...tres", r.texto)
 
+        # --- Gemini 3.x: la firma del function_call debe volver intacta ---
+        llm.MODELOS = ["modelo-bueno"]
+        for k in llm.POOL:
+            k.inhabilitada, k.libre_desde, k.motivo = False, 0.0, ""
+        vistas: list[object] = []
+
+        def espia_firmas(llave, modelo, system, historial, tools, max_tokens,
+                         sin_firmas=False):
+            for m in historial:
+                for ll in m.get("llamadas") or []:
+                    vistas.append(None if sin_firmas else ll.firma)
+            return llm.Respuesta(texto="OK", modelo=modelo, llave=llave.etiqueta)
+
+        llm._llamar_gemini = espia_firmas
+        hist = [{"rol": "usuario", "texto": "x"},
+                {"rol": "modelo", "llamadas": [
+                    llm.Llamada(nombre="t", args={}, firma=b"FIRMA-OPACA")]},
+                {"rol": "usuario", "resultados": [{"nombre": "t", "salida": "{}"}]}]
+        llm.generar("", hist, [], 16)
+        chequeo("la firma del function_call sobrevive el ida y vuelta",
+                vistas == [b"FIRMA-OPACA"], f"vistas={vistas}")
+
+        # la firma no puede colarse a la traza: son bytes, romperian json.dumps
+        import json as _json
+        _json.dumps(hist[1]["llamadas"][0].args)
+        chequeo("la firma va fuera de args (la traza sigue serializable)",
+                "firma" not in hist[1]["llamadas"][0].args)
+
+        # modelo que rechaza firmas -> reintenta sin ellas en vez de morir
+        estado_firma = {"rechazo": False}
+
+        def rechaza_firma(llave, modelo, system, historial, tools, max_tokens,
+                          sin_firmas=False):
+            if not sin_firmas:
+                estado_firma["rechazo"] = True
+                raise RuntimeError(
+                    "400 INVALID_ARGUMENT Function call is missing a "
+                    "thought_signature in functionCall parts.")
+            return llm.Respuesta(texto="OK", modelo=modelo, llave=llave.etiqueta)
+
+        llm._llamar_gemini = rechaza_firma
+        r2 = llm.generar("", hist, [], 16)
+        chequeo("modelo que rechaza la firma -> reintenta sin ella, no muere",
+                estado_firma["rechazo"] and r2.texto == "OK", f"{r2.intentos} intento(s)")
+
+        # un 400 nuestro no debe quemar el pool ni disfrazarse de "sin llaves"
+        def malformada(llave, modelo, system, historial, tools, max_tokens,
+                       sin_firmas=False):
+            raise RuntimeError("400 INVALID_ARGUMENT: campo desconocido 'foo'")
+
+        llm._llamar_gemini = malformada
+        try:
+            llm.generar("", [{"rol": "usuario", "texto": "x"}], [], 16)
+            chequeo("peticion malformada (400) -> aborta con el error crudo", False)
+        except llm.PeticionMalFormada as e:
+            chequeo("peticion malformada (400) -> aborta con el error crudo",
+                    "foo" in str(e), str(e)[:60])
+        except llm.SinLlavesDisponibles:
+            chequeo("peticion malformada (400) -> aborta con el error crudo", False,
+                    "se disfrazo de 'sin llaves' y quemo el pool")
+        chequeo("un 400 no inhabilita las llaves sanas",
+                all(not k.inhabilitada for k in llm.POOL))
+
+        llm._llamar_gemini = falso
         for k in llm.POOL:
             k.matar("prueba")
         try:
