@@ -74,10 +74,30 @@ class Llave:
 
 
 def _construir_pool() -> list[Llave]:
-    crudas = _lista("GEMINI_API_KEYS")
-    if not crudas and os.environ.get("GEMINI_API_KEY"):
-        crudas = [os.environ["GEMINI_API_KEY"]]
-    return [Llave(valor=k, etiqueta=f"key{i+1}:...{k[-4:]}") for i, k in enumerate(crudas)]
+    """Acepta tres formas de declarar llaves, en este orden, y deduplica:
+
+      GEMINI_API_KEYS=llave1,llave2,llave3     (lista)
+      GEMINI_API_KEY=llave                     (una sola)
+      GEMINI_API_KEY_1=...  GEMINI_API_KEY_2=  (numeradas, mas facil de editar)
+    """
+    crudas: list[str] = list(_lista("GEMINI_API_KEYS"))
+    if os.environ.get("GEMINI_API_KEY"):
+        crudas.append(os.environ["GEMINI_API_KEY"].strip())
+    for i in range(1, 21):
+        v = os.environ.get(f"GEMINI_API_KEY_{i}", "").strip()
+        if v:
+            crudas.append(v)
+
+    vistas, pool = set(), []
+    for k in crudas:
+        # ignora placeholders sin reemplazar
+        if not k or k.lower().startswith(("llave", "aiza...", "tu_", "pega")):
+            continue
+        if k in vistas:
+            continue
+        vistas.add(k)
+        pool.append(Llave(valor=k, etiqueta=f"key{len(pool)+1}:...{k[-4:]}"))
+    return pool
 
 
 POOL: list[Llave] = _construir_pool()
