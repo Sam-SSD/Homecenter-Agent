@@ -48,13 +48,21 @@ def url_categoria(cat_id: str, slug: str) -> str:
 
 
 def fetch(url: str, force: bool = False) -> str | None:
-    """Devuelve el HTML. Usa cache salvo force=True. None si robots lo prohibe o falla."""
+    """Devuelve el HTML. Usa cache salvo force=True. None si robots lo prohibe o falla.
+
+    REANUDABLE: si el archivo ya esta en cache NO se hace ningun request. Volver a
+    lanzar fetch_all solo baja lo que falta; nunca borra ni reempieza.
+    El unico modo que re-descarga es force=True (o sea --force).
+    """
     if not permitido(url):
         print(f"  omitido por robots: {url}")
         return None
     CACHE.mkdir(parents=True, exist_ok=True)
     archivo = CACHE / f"{clave(url)}.html"
     if archivo.exists() and not force:
+        # Se re-registra por si el proceso murio entre escribir y registrar en
+        # una corrida anterior: _registrar es idempotente y evita huerfanos.
+        _registrar(url)
         return archivo.read_text(encoding="utf-8")
     try:
         r = SESSION.get(url, timeout=25)
@@ -65,7 +73,11 @@ def fetch(url: str, force: bool = False) -> str | None:
         return None
     finally:
         time.sleep(DELAY)
-    archivo.write_text(html, encoding="utf-8")
+    # Escribir primero a .tmp y renombrar: un Ctrl+C a mitad no deja un HTML
+    # truncado que el parser leeria como pagina valida.
+    tmp = archivo.with_suffix(".tmp")
+    tmp.write_text(html, encoding="utf-8")
+    tmp.replace(archivo)
     _registrar(url)
     return html
 

@@ -8,24 +8,137 @@ AgentSprint by ReshapeX · Universidad EAFIT · Medellín · 25 de julio de 2026
 
 ---
 
-## Arranque rápido
+## Runbook manual, paso a paso
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env        # poner ANTHROPIC_API_KEY
+Windows PowerShell, desde la raíz del proyecto. **Cada paso es independiente y se
+puede repetir sin miedo.** En Git Bash o Linux cambia `.venv\Scripts\python` por
+`.venv/bin/python`.
 
-# sin red y sin API key: núcleo determinista sobre el fixture
-python -m ingest.build_index --fuente evals/fixture_productos.json
-python -m evals.prove
-python run.py --largo 2 --ancho 2 --presupuesto 2000000 --deterministico
+### Paso 0 — entorno (una sola vez)
 
-# con datos reales
-python -m ingest.fetch_all --etapa 2 && python -m ingest.parse_all
-python -m ingest.build_index && python -m ingest.sanity
-python -m evals.prove --con-llm
-streamlit run app.py
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+Copy-Item .env.example .env      # y pega ANTHROPIC_API_KEY dentro
 ```
+
+### Paso 1 — ver el estado antes de tocar nada
+
+```powershell
+.venv\Scripts\python -m ingest.estado
+```
+
+Dice cuántas páginas hay en cache, qué falta por descargar por categoría, y con
+qué datos está trabajando el agente en este momento. **Córrelo antes y después de
+cada paso.** No usa red.
+
+### Paso 2 — descargar (el único paso que usa red)
+
+```powershell
+.venv\Scripts\python -m ingest.fetch_all --etapa 1    # 3 categorías, ~27 páginas
+.venv\Scripts\python -m ingest.fetch_all --etapa 2    # las 14 del núcleo + 6 de guías
+.venv\Scripts\python -m ingest.fetch_all --etapa 3    # las 5 opcionales
+```
+
+Lanza **uno solo a la vez**. Dos procesos en paralelo duplican la tasa de requests
+y Cloudflare está delante del sitio.
+
+Para verlo en vivo, en otra terminal:
+
+```powershell
+while ($true) {
+  $n = (Get-ChildItem cache\html -ErrorAction SilentlyContinue).Count
+  $u = (Get-Content cache\manifest.jsonl -Tail 1 | ConvertFrom-Json).url
+  Write-Host "$n paginas | $($u.Split('/')[-2..-1] -join '/')"
+  Start-Sleep 5
+}
+```
+
+### Paso 3 — parsear (sin red, aquí se itera)
+
+```powershell
+.venv\Scripts\python -m ingest.parse_all
+```
+
+Lee todo `cache/` y escribe `data/productos.json` y `data/guias.json`. Corre en
+segundos, así que cuando ajustes un selector en `ingest/parse.py` repite solo este
+paso. Para probar contra una página guardada:
+
+```powershell
+.venv\Scripts\python -m ingest.probar_parser
+```
+
+### Paso 4 — indexar (de aquí lee el agente)
+
+```powershell
+.venv\Scripts\python -m ingest.build_index
+```
+
+Sin `--fuente` usa los datos reales. Con `--fuente evals/fixture_productos.json`
+vuelve al fixture sintético de 30 productos.
+
+### Paso 5 — QA de los datos
+
+```powershell
+.venv\Scripts\python -m ingest.sanity
+```
+
+Imprime conteo y rango de precios por categoría, precios sospechosos y porcentaje
+de unidad incierta. **Abre a mano los 3 links que imprime al final y compara el
+precio.** Eso es lo que separa un dataset real de uno que parece real.
+
+### Paso 6 — semilla versionada
+
+```powershell
+.venv\Scripts\python -m ingest.make_seed
+```
+
+Crea `data/muestra.json` con ~25 productos. Este sí va al repo, para que los evals
+corran en cualquier máquina sin redistribuir el catálogo completo.
+
+### Paso 7 — probar el sistema
+
+```powershell
+.venv\Scripts\python -m evals.prove              # 8 componentes, sin API key
+.venv\Scripts\python -m evals.prove --con-llm    # incluye los 3 loops agénticos
+.venv\Scripts\python run.py --largo 2 --ancho 2 --presupuesto 2000000
+.venv\Scripts\python run.py --largo 2 --ancho 2 --presupuesto 2000000 --deterministico
+```
+
+### Paso 8 — la mañana del evento, desde EAFIT
+
+```powershell
+.venv\Scripts\python -m ingest.healthcheck       # ¿la red de EAFIT permite el PDP?
+.venv\Scripts\streamlit run app.py
+```
+
+---
+
+## Garantías de reanudación
+
+Qué pasa si vuelves a lanzar cada paso:
+
+| Comando | Reanuda | Qué hace exactamente |
+|---|---|---|
+| `fetch_all --etapa N` | **Sí** | Si el HTML ya está en cache, **cero requests**. Solo baja lo que falta. Verificado: 132 páginas en cache → 1,5 s y 0 descargas nuevas. |
+| `fetch_all --force` | **No** | Re-descarga todo. Úsalo solo para refrescar precios. |
+| `parse_all` | Re-deriva | Reescribe los dos JSON desde el cache completo. No pierde nada porque el cache es la fuente. |
+| `build_index` | Reconstruye | `DROP TABLE` y vuelve a llenar desde el JSON. Seguro: todo es derivado. |
+| `sanity`, `estado`, `probar_parser` | Solo lectura | No escriben nada. |
+| `make_seed` | Sobrescribe | Regenera `data/muestra.json`. |
+
+**Lo único que nunca hay que borrar es `cache/`.** Todo lo demás se regenera desde
+ahí sin volver a tocar el sitio. Si borras `cache/`, tienes que re-descargar las
+132 páginas.
+
+Detalles de robustez en `ingest/fetch.py`:
+
+- El HTML se escribe a `.tmp` y se renombra al final, así que un Ctrl+C no deja una
+  página truncada que el parser leería como válida.
+- El registro en `manifest.jsonl` es idempotente y también ocurre en los aciertos
+  de cache, para que un proceso muerto a mitad no deje archivos huérfanos
+  invisibles al parseo. `ingest.estado` reporta huérfanos si aparecen.
+
 
 ## Arquitectura
 
