@@ -60,7 +60,7 @@ python -m ingest.healthcheck                          # correr otra vez 7:45 des
 
 # sin red / sin API key
 python -m ingest.build_index --fuente evals/fixture_productos.json
-python -m evals.prove                                 # 34 chequeos, 8 componentes
+python -m evals.prove                                 # 54 chequeos, 10 componentes
 python run.py --largo 2 --ancho 2 --presupuesto 2000000 --deterministico
 
 # completo
@@ -70,8 +70,13 @@ streamlit run app.py
 ```
 
 ## Estado actual
-- NÃºcleo determinista: **funcionando**, 34/34 en `prove.py` contra el fixture.
-- Loops LLM: escritos, **sin probar con API key**. Es la primera tarea.
+- NÃºcleo determinista: **funcionando**, 54/54 en `prove.py` contra el fixture.
+- Loops LLM: **probados con llave real**, 58/58 con `--con-llm`. Flujo completo:
+  12 requerimientos â†’ 11 conceptos â†’ $1.995.400 de tope $2.000.000, aprobado
+  por el verificador sin fallas.
+- Cuota Gemini del tier gratuito: **20 requests por dÃ­a y POR MODELO**. Una
+  corrida `--con-llm` gasta ~35, asÃ­ que `GEMINI_MODELOS` lleva 4 modelos: el
+  fallback por modelo es lo que sostiene el dÃ­a de demo. MÃ¡s llaves = mÃ¡s cupo.
 - `data/catalogo.db` estÃ¡ construido desde `evals/fixture_productos.json`
   (30 productos sintÃ©ticos). Reconstruir con datos reales cambia todo lo demÃ¡s sin
   tocar cÃ³digo: el contrato es la base de datos.
@@ -89,8 +94,13 @@ streamlit run app.py
 - 11:20 congelar. `git tag demo`. Dos ensayos con cronÃ³metro.
 
 ## Verificar antes del evento
-- Los modelos en `.env` (`GEMINI_MODELOS`). Gemini 2.0 se apago el 1-jun-2026 y ya
-  existen 3.5/3.6 Flash: corre `python -m src.llm --modelos` y pon los reales.
+- Los modelos en `.env` (`GEMINI_MODELOS`): ya verificados el 24-jul-2026 contra
+  la llave real (3.6-flash, 3.5-flash-lite, 3.1-flash-lite, 3-flash-preview).
+  2.0 y 2.5 estan apagados. Si cambia la llave, corre `python -m src.llm --modelos`.
+- `python -m src.llm` ahora hace una ida y vuelta con herramienta: si eso pasa,
+  los loops corren. El ping de un solo turno no cubria el bug de las firmas.
+- **Conseguir mas llaves.** Con una sola, una corrida `--con-llm` casi agota el
+  dia. Cada llave del equipo multiplica el cupo (20/dia x modelo x llave).
 - El parÃ¡metro de paginaciÃ³n de las categorÃ­as: **no confirmado**. Por eso
   `ingest/fetch.py` usa facetas (permitidas en robots.txt) en vez de paginar.
 
