@@ -1,0 +1,42 @@
+- id: demo
+  descripcion: el caso de la demo
+  largo_m: 2.0
+  ancho_m: 2.0
+  presupuesto_cop: 2000000
+  espera: aprobada
+
+- id: apretado
+  descripcion: bano pequeno con presupuesto justo, debe recortar opcionales
+  largo_m: 1.5
+  ancho_m: 2.0
+  presupuesto_cop: 1200000
+  espera: aprobada
+
+- id: holgado
+  descripcion: bano grande con plata, debe mantener gama media y ofrecer upgrades
+  largo_m: 3.0
+  ancho_m: 2.5
+  presupuesto_cop: 6000000
+  espera: aprobada
+
+- id: sin_ducha
+  descripcion: media bano, no debe cotizar griferia de ducha
+  largo_m: 1.2
+  ancho_m: 1.5
+  incluye_ducha: false
+  presupuesto_cop: 1500000
+  espera: aprobada
+
+- id: presupuesto_irreal
+  descripcion: guardrail debe rechazar antes de gastar una llamada al LLM
+  largo_m: 2.0
+  ancho_m: 2.0
+  presupuesto_cop: 200000
+  espera: rechazo_guardrail
+
+- id: medidas_absurdas
+  descripcion: guardrail debe rechazar un bano de 36 m2
+  largo_m: 6.0
+  ancho_m: 6.0
+  presupuesto_cop: 5000000
+  espera: rechazo_guardrail
