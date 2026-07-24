@@ -44,6 +44,10 @@ _cargar_env()
 PROVEEDOR = os.environ.get("LLM_PROVEEDOR", "gemini").lower()
 MODELOS = _lista("GEMINI_MODELOS", "gemini-2.5-flash")
 COOLDOWN_S = int(os.environ.get("LLM_COOLDOWN_S", "60"))
+# Con una sola llave, enfriarla equivale a rendirse. Si el pool entero esta
+# enfriando y la mas cercana vuelve dentro de este techo, se espera en vez de
+# fallar. Techo bajo a proposito: en demo, colgarse es peor que fallar claro.
+ESPERA_MAX_S = int(os.environ.get("LLM_ESPERA_MAX_S", "25"))
 
 
 # ------------------------------------------------------------------- pool de llaves
@@ -152,6 +156,16 @@ def _clasificar(e: Exception) -> str:
 
 class PeticionMalFormada(RuntimeError):
     """El proveedor rechazo la peticion (400). Bug nuestro, no de la llave."""
+
+
+def _demora_sugerida(e: Exception) -> int | None:
+    """Gemini manda un RetryInfo en el 429 ('retryDelay': '7s'). Suele ser unos
+    pocos segundos, no los 60 de COOLDOWN_S: conviene hacerle caso."""
+    import re
+    m = re.search(r"['\"]retryDelay['\"]:\s*['\"](\d+(?:\.\d+)?)s?['\"]", str(e))
+    if not m:
+        return None
+    return max(1, min(int(float(m.group(1))) + 1, COOLDOWN_S))
 
 
 # ------------------------------------------------------------ respuesta normalizada
@@ -345,8 +359,12 @@ def generar(system: str, historial: list[dict], tools: list[dict] | None = None,
     """Intenta cada modelo de la cadena con cada llave disponible del pool.
 
     Orden: modelo1 x llave1, modelo1 x llave2, ... y si el modelo no existe pasa
-    al siguiente modelo. Una llave con cuota agotada se enfría COOLDOWN_S segundos;
-    una llave inválida se inhabilita para el resto de la sesión.
+    al siguiente modelo. Una llave con cuota agotada se enfría lo que pida el
+    proveedor; una llave inválida se inhabilita para el resto de la sesión.
+
+    Si el pool entero quedó enfriando pero la primera en volver lo hace dentro de
+    ESPERA_MAX_S, espera y reintenta: con una sola llave, rendirse ante un 429
+    por minuto es peor que esperar unos segundos.
     """
     tools = tools or []
     if PROVEEDOR == "anthropic":
@@ -359,6 +377,32 @@ def generar(system: str, historial: list[dict], tools: list[dict] | None = None,
         raise SinLlavesDisponibles(
             "no hay llaves. Pon GEMINI_API_KEYS=llave1,llave2 en .env")
 
+    esperado = 0.0
+    while True:
+        try:
+            return _rondas(system, historial, tools, max_tokens, traza)
+        except SinLlavesDisponibles:
+            # nadie disponible: ¿vuelve alguna lo bastante pronto?
+            vivas = [k for k in POOL if not k.inhabilitada]
+            if not vivas:
+                raise
+            falta = min(k.libre_desde for k in vivas) - time.time()
+            if falta <= 0 or esperado + falta > ESPERA_MAX_S:
+                raise
+            esperado += falta
+            if traza:
+                traza.paso("llm", "espera",
+                           f"pool enfriando, {falta:.0f}s (acumulado {esperado:.0f}s"
+                           f"/{ESPERA_MAX_S}s)")
+            else:
+                print(f"  [llm] pool enfriando, esperando {falta:.0f}s...",
+                      file=sys.stderr)
+            time.sleep(falta)
+
+
+def _rondas(system: str, historial: list[dict], tools: list[dict],
+            max_tokens: int, traza) -> Respuesta:
+    """Una pasada por la cadena de modelos x pool. La espera vive en generar()."""
     intentos, ultimo = 0, None
     # Una vez que un modelo rechaza las firmas, se sueltan para el resto de la
     # llamada: pertenecen al modelo que las emitio y no viajan entre modelos.
@@ -396,7 +440,7 @@ def generar(system: str, historial: list[dict], tools: list[dict] | None = None,
                 elif clase == "llave_muerta":
                     llave.matar(clase)
                 elif clase == "cuota":
-                    llave.enfriar(COOLDOWN_S, clase)
+                    llave.enfriar(_demora_sugerida(e) or COOLDOWN_S, clase)
                 elif clase == "modelo_malo":
                     modelo_roto = True
                     break

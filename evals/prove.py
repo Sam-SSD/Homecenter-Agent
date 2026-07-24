@@ -7,7 +7,7 @@
 Esta es la respuesta a "esto esta mockeado?" y a "el componente funciona?".
 """
 from __future__ import annotations
-import argparse, os, sys
+import argparse, os, sys, time
 import yaml
 from pydantic import ValidationError
 
@@ -270,6 +270,39 @@ def c9_fallback_llaves() -> None:
         chequeo("un 400 no inhabilita las llaves sanas",
                 all(not k.inhabilitada for k in llm.POOL))
 
+        # --- una sola llave enfriando: esperar es mejor que rendirse ---
+        guardado_espera = llm.ESPERA_MAX_S
+        llm.ESPERA_MAX_S = 3
+        llm.POOL = [llm.Llave("k-sola", "key1:...sola")]
+        llm.POOL[0].libre_desde = time.time() + 1  # vuelve en 1s
+        llm._llamar_gemini = lambda llave, modelo, *a, **k: llm.Respuesta(
+            texto="OK", modelo=modelo, llave=llave.etiqueta)
+        t0 = time.time()
+        r3 = llm.generar("", [{"rol": "usuario", "texto": "x"}], [], 16)
+        chequeo("pool de 1 llave enfriando -> espera y reintenta, no se rinde",
+                r3.texto == "OK" and 0.5 < time.time() - t0 < 3,
+                f"{time.time()-t0:.1f}s")
+
+        # pero el techo se respeta: nada de colgarse en plena demo
+        llm.POOL[0].libre_desde = time.time() + 60
+        t0 = time.time()
+        try:
+            llm.generar("", [{"rol": "usuario", "texto": "x"}], [], 16)
+            chequeo("espera mas larga que el techo -> falla rapido", False)
+        except llm.SinLlavesDisponibles:
+            chequeo("espera mas larga que el techo -> falla rapido",
+                    time.time() - t0 < 1, f"{time.time()-t0:.1f}s")
+        llm.ESPERA_MAX_S = guardado_espera
+
+        # el 429 hace caso al retryDelay del proveedor, no al COOLDOWN_S fijo
+        chequeo("usa el retryDelay que manda el proveedor",
+                llm._demora_sugerida(RuntimeError(
+                    "429 RESOURCE_EXHAUSTED {'retryDelay': '7s'}")) == 8,
+                str(llm._demora_sugerida(RuntimeError("'retryDelay': '7s'"))))
+
+        llm.POOL = [llm.Llave("k-uno", "key1:...uno"),
+                    llm.Llave("k-dos", "key2:...dos"),
+                    llm.Llave("k-tres", "key3:...tres")]
         llm._llamar_gemini = falso
         for k in llm.POOL:
             k.matar("prueba")
