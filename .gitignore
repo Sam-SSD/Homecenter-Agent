@@ -1,0 +1,12 @@
+.env
+cache/
+data/productos.json
+data/guias.json
+data/productos.*.json
+data/catalogo.db
+data/memoria.db
+trazas/
+__pycache__/
+*.pyc
+.venv/
+venv/
