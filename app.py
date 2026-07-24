@@ -35,7 +35,15 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
     from src import llm as _llm
-        st.warning("Sin ANTHROPIC_API_KEY: solo funciona el modo determinista.")
+    _est = _llm.estado()
+    if _est["proveedor"] != "gemini":
+        st.caption(f"proveedor: {_est['proveedor']}")
+    elif not _est["llaves"]:
+        st.warning("Sin llaves de LLM: solo funciona el modo determinista. "
+                   "Pon GEMINI_API_KEYS en .env")
+    else:
+        st.caption(f"{_est['disponibles']}/{_est['llaves']} llaves disponibles - "
+                   f"{len(_est['modelos'])} modelos en cadena")
 
 if st.session_state.pop("ejecutar", False):
     try:
