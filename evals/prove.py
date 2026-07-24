@@ -174,6 +174,51 @@ def c8_observabilidad() -> None:
             str(t.herramientas_usadas()))
 
 
+def c8b_cuantificador_no_transcribe() -> None:
+    """REGLA 1: la formula y la fuente las deriva Python, no las copia el LLM.
+
+    El modelo real entregaba la lista a mano con solo concepto/cantidad/unidad y
+    los 12 requerimientos se caian por validacion (falta fuente_regla / formula).
+    Esto lo fija sin gastar cuota: simula exactamente ese payload mutilado.
+    """
+    titulo("8b", "El Cuantificador no transcribe cifras que calculo Python",
+           "src/subagentes.py")
+    from src import subagentes
+    from src.traza import Traza
+
+    t = Traza("prove-transcribe")
+    espacio = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    capturado: dict = {}
+
+    def loop_falso(actor, system, objetivo, tools_, ejecutores, traza, max_iter=14):
+        capturado["max_iter"] = max_iter
+        ejecutores["calcular_cantidad"](regla_id="piso_ceramica")
+        ejecutores["calcular_cantidad"](regla_id="sanitario")
+        # el LLM entrega la lista mutilada, igual que en la corrida real
+        entrega = ejecutores["entregar_requerimientos"](requerimientos=[
+            {"concepto": "ceramica de piso", "cantidad": 4.4, "unidad": "m2"}])
+        return {"entrega": entrega, "texto": "", "iteraciones": 3}
+
+    original = subagentes.loop.correr
+    try:
+        subagentes.loop.correr = loop_falso
+        reqs = subagentes.cuantificar(espacio, t)
+    finally:
+        subagentes.loop.correr = original
+
+    chequeo("entrega lo que calculo Python, no lo que listo el LLM", len(reqs) == 2,
+            f"{len(reqs)} requerimientos")
+    chequeo("cada requerimiento conserva su formula sustituida",
+            all(r.formula and "=" in r.formula for r in reqs),
+            reqs[0].formula if reqs else "")
+    chequeo("cada requerimiento conserva su fuente",
+            all(r.fuente_regla for r in reqs))
+    chequeo("una lista mutilada del LLM queda en la traza como divergencia",
+            any(p.get("tipo") == "divergencia" for p in t.pasos))
+    chequeo("max_iter alcanza para las reglas + la entrega en modelos lite",
+            capturado.get("max_iter", 0) >= 20, str(capturado.get("max_iter")))
+
+
 def c9_fallback_llaves() -> None:
     titulo(9, "Fallback de llaves y modelos del LLM", "src/llm.py")
     from src import llm
@@ -376,7 +421,7 @@ def main() -> int:
         return 1
     for f in (c1_guardrails, c2_retrieval, c3_reglas_sin_aritmetica_del_llm, c4_aislamiento,
               c5_negociacion, c6_autocorreccion, c7_memoria, c8_observabilidad,
-              c9_fallback_llaves):
+              c8b_cuantificador_no_transcribe, c9_fallback_llaves):
         f()
     if a.con_llm:
         c10_llm()

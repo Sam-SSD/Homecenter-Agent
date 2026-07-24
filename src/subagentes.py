@@ -15,22 +15,41 @@ def cuantificar(espacio: Espacio, traza) -> list[Requerimiento]:
     objetivo = ("Cuantifica los materiales para remodelar este bano.\n"
                 f"Espacio: {json.dumps(payload, ensure_ascii=False)}\n"
                 "Pasa este mismo objeto como argumento `espacio` de calcular_cantidad.")
+    # REGLA 1: calcular_cantidad ya devuelve el Requerimiento completo, con la
+    # formula sustituida y la fuente que derivo Python. Se acumula aqui y ESO es
+    # lo que se entrega. Si se dejara armar la lista al LLM, el modelo copia
+    # concepto/cantidad/unidad y pierde formula y fuente_regla: cifras sin fuente
+    # y aritmetica transcrita a mano, justo lo que la regla prohibe.
+    calculados: dict[str, Requerimiento] = {}
+
+    def _calcular(regla_id, **_):
+        salida = tools.calcular_cantidad(regla_id, payload)
+        if isinstance(salida, dict) and not salida.get("error"):
+            try:  # el ultimo gana: cubre el reintento tras un regla_id errado
+                calculados[regla_id] = Requerimiento(**salida)
+            except Exception as e:  # noqa: BLE001
+                traza.paso("cuantificador", "descartado", f"regla {regla_id}: {e}")
+        return salida
+
     ejecutores = {
         "listar_reglas": tools.listar_reglas,
         "consultar_guia": tools.consultar_guia,
-        "calcular_cantidad": lambda regla_id, **_: tools.calcular_cantidad(regla_id, payload),
-        "entregar_requerimientos": lambda requerimientos=None, **_: {"ok": True,
-            "requerimientos": llm.como_lista(requerimientos)},
+        "calcular_cantidad": _calcular,
+        # el payload del LLM se ignora como fuente de cifras: solo dice "ya termine"
+        "entregar_requerimientos": lambda requerimientos=None, **_: {
+            "ok": True, "listados": len(llm.como_lista(requerimientos)),
+            "requerimientos": [r.model_dump() for r in calculados.values()]},
     }
     r = loop.correr("cuantificador", prompts.CUANTIFICADOR, objetivo,
-                    tools.tools_cuantificador(), ejecutores, traza)
-    entrega = (r.get("entrega") or {}).get("requerimientos") or []
-    out = []
-    for d in entrega:
-        try:
-            out.append(Requerimiento(**d))
-        except Exception as e:
-            traza.paso("cuantificador", "descartado", f"requerimiento invalido: {e}")
+                    tools.tools_cuantificador(), ejecutores, traza,
+                    # los modelos lite llaman calcular_cantidad de a una por turno:
+                    # 1 listar + 1 consultar + 12 reglas + la entrega no caben en 14
+                    max_iter=24)
+    out = list(calculados.values())
+    listados = (r.get("entrega") or {}).get("listados")
+    if listados is not None and listados != len(out):
+        traza.paso("cuantificador", "divergencia",
+                   f"el LLM listo {listados}, Python calculo {len(out)}: se entregan los calculados")
     traza.paso("cuantificador", "entrega", f"{len(out)} requerimientos")
     return out
 
