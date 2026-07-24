@@ -1,4 +1,4 @@
-"""Prueba del nucleo determinista: reglas -> catalogo -> negociador -> verificador.
+﻿"""Prueba del nucleo determinista: reglas -> catalogo -> negociador -> verificador.
 Corre sin LLM y sin red. Es la base de evals/prove.py."""
 from __future__ import annotations
 from data.categorias import CONCEPTO_A_CATEGORIA as MAPA
@@ -23,7 +23,7 @@ def requerimientos_de(espacio: Espacio):
 def candidatos_de(reqs):
     c = {}
     for r in reqs:
-        g = catalogo.gamas(r.concepto, MAPA.get(r.concepto))
+        g = catalogo.gamas(r.concepto, MAPA.get(r.concepto), unidad_requerida=r.unidad)
         if g:
             c[r.concepto] = g
     return c

@@ -1,4 +1,4 @@
-"""Guardrail de salida y motor de auto-correccion. Codigo puro: no audita un LLM
+﻿"""Guardrail de salida y motor de auto-correccion. Codigo puro: no audita un LLM
 con otro LLM. Sus fallas se devuelven al loop COMO RESULTADO DE HERRAMIENTA,
 para que el agente las lea y decida. Eso es 'look at the result, repeat'.
 """
@@ -32,7 +32,7 @@ def verificar(cot: Cotizacion) -> list[Falla]:
         if not it.requerimiento.fuente_regla:
             fallas.append(Falla(codigo="cifra_sin_fuente", concepto=c,
                                 mensaje="la cantidad no declara fuente"))
-        if it.producto.unidad_incierta:
+        if it.producto.unidad_incierta and it.requerimiento.unidad in ("m2", "kg"):
             fallas.append(Falla(codigo="unidad_incierta", concepto=c,
                                 mensaje=f"no se pudo inferir la unidad de venta de {it.producto.sku}"))
 

@@ -1,4 +1,4 @@
-"""Acceso al catalogo: SQL + FTS5. NO es una base vectorial y es a proposito.
+﻿"""Acceso al catalogo: SQL + FTS5. NO es una base vectorial y es a proposito.
 Un embedding no responde "el mas barato bajo $400.000 en porcelana blanca";
 un WHERE + bm25 si, y es auditable linea por linea."""
 from __future__ import annotations
@@ -68,13 +68,54 @@ def skus_conocidos() -> set[str]:
         return {r[0] for r in c.execute("SELECT sku FROM productos")}
 
 
-def gamas(consulta: str, categorias: list[str] | None = None) -> dict[str, Producto]:
-    """Tres opciones por concepto. Es lo que le permite al Negociador recortar."""
-    ps = buscar(consulta, categorias=categorias, k=40)
+def _normalizar(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", (s or "").lower())
+    return "".join(c for c in s if not unicodedata.combining(c))
+
+
+def filtrar_por_concepto(ps: list[Producto], concepto: str) -> list[Producto]:
+    """Descarta accesorios y repuestos que viven en la misma categoria.
+    Si el filtro deja la lista vacia, devuelve la original: mejor un candidato
+    imperfecto que ningun candidato."""
+    from data.categorias import CONCEPTO_FILTROS
+    f = CONCEPTO_FILTROS.get(concepto)
+    if not f or not ps:
+        return ps
+    debe = [_normalizar(x) for x in f.get("debe", [])]
+    no = [_normalizar(x) for x in f.get("no", [])]
+    ok = []
+    for p in ps:
+        n = _normalizar(p.nombre)
+        if no and any(x in n for x in no):
+            continue
+        if debe and not any(x in n for x in debe):
+            continue
+        ok.append(p)
+    return ok or ps
+
+
+def gamas(consulta: str, categorias: list[str] | None = None,
+          unidad_requerida: str | None = None) -> dict[str, Producto]:
+    """Tres opciones por concepto. Es lo que le permite al Negociador recortar.
+
+    Filtra accesorios por nombre y, cuando la obra se mide en m2/kg/galon,
+    prefiere productos que declaren su contenido de venta: si no lo declaran no
+    se puede calcular cuantas cajas comprar."""
+    ps = buscar(consulta, categorias=categorias, k=200)
+    ps = filtrar_por_concepto(ps, consulta)
+    if unidad_requerida in ("m2", "kg"):  # galon: la regla ya entrega galones
+        con_unidad = [p for p in ps if p.contenido_por_unidad()]
+        if con_unidad:
+            ps = con_unidad
     if not ps:
         return {}
     ps = sorted(ps, key=lambda p: p.precio)
-    return {"economico": ps[0], "media": ps[len(ps) // 2], "premium": ps[-1]}
+    # Percentiles en vez de min/max: los extremos absolutos suelen ser un
+    # accesorio suelto o un producto industrial fuera de contexto.
+    def en(frac: float) -> Producto:
+        return ps[min(int(len(ps) * frac), len(ps) - 1)]
+    return {"economico": en(0.10), "media": en(0.45), "premium": en(0.85)}
 
 
 def buscar_guias(consulta: str, k: int = 3) -> list[dict]:

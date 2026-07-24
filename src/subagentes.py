@@ -1,4 +1,4 @@
-"""Los dos sub-agentes. Cada uno tiene su propio loop, su propio system prompt y
+﻿"""Los dos sub-agentes. Cada uno tiene su propio loop, su propio system prompt y
 su propio subconjunto de herramientas. Si fuera una sola llamada al LLM seria una
 funcion, no un agente."""
 from __future__ import annotations
@@ -81,7 +81,7 @@ def completar_gamas(candidatos: dict[str, dict[str, Producto]],
     for req in requerimientos:
         if candidatos.get(req.concepto):
             continue
-        g = catalogo.gamas(req.concepto, MAPA.get(req.concepto))
+        g = catalogo.gamas(req.concepto, MAPA.get(req.concepto), unidad_requerida=req.unidad)
         if g:
             candidatos[req.concepto] = g
             traza.paso("sistema", "relleno_deterministico", f"{req.concepto} por SQL")
