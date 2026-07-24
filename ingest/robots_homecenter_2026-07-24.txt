@@ -1,0 +1,108 @@
+
+# robots.txt mod 12/04/2024
+
+user-agent: *
+
+# Directories
+
+Disallow: /cgi-bin/
+
+Disallow: /static/script/
+
+Disallow: /static/styles/
+
+Disallow: /static/files_descarga/
+
+Disallow: /homecenter-co/CMR/
+
+Disallow: /homecenter-co/cart/
+
+Disallow: /homecenter-co/browse/
+
+Disallow: /homecenter-co/myaccount/
+
+Disallow: /homecenter-co/search/
+
+
+# Paths (no clean URLs)
+
+Disallow: */homecenter-co/search?
+
+Disallow: /*N-*
+
+Disallow: /*Ver-todos*/
+
+Disallow: /*staticContent
+
+Disallow: /*.aspx$
+
+Disallow: */search?
+
+Disallow: */noSearchResult
+
+Disallow: */no-search-result?
+
+Disallow: */*?queryId=*
+
+Disallow: */*?bvstate=*
+
+Allow: /*f.product.brandName=*
+
+Allow: /*f.product.attribute.Tipo=*
+
+Allow: /*f.product.attribute.Capacidad=*
+
+Allow: /*f.product.attribute.Material=*
+
+Allow: /*f.product.attribute.Color=*
+
+Allow: /*f.product.attribute.Forma=*
+
+Allow: /*f.product.attribute.Voltaje=*
+
+Allow: /*brand/*
+
+
+
+# Sitemaps
+
+Sitemap General: https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-sitemap-index.xml 
+
+Sitemap faceta color: 
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-color-sitemap.xml
+
+Sitemap faceta capacidad:
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-capacidad-sitemap.xml
+
+Sitemap faceta material:
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-material-sitemap.xml
+
+Sitemap faceta forma: https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-forma-sitemap.xml
+
+Sitemap Voltaje: 
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-voltaje-sitemap.xml
+
+Sitemap faceta tipo:
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-tipo-sitemap.xml
+
+Sitemap Page Brand: 
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-page-brand-sitemap.xml
+
+Sitemap faceta marca:
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-brand-sitemap.xml
+
+Sitemap productos:
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-product-sitemap1.xml
+
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-product-sitemap2.xml
+
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-product-sitemap3.xml
+
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-product-sitemap4.xml 
+
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-product-sitemap5.xml
+
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-product-sitemap6.xml
+
+Sitemap category:
+https://www.homecenter.com.co/sodimac-catalyst-bu-prod-browse-sitemaps/soco-browse-category-sitemap.xml
