@@ -1,4 +1,4 @@
-"""El Supervisor: loop propio que delega, lee memoria y decide si repetir.
+﻿"""El Supervisor: loop propio que delega, lee memoria y decide si repetir.
 
 Dos modos:
   correr_agentico()      -> el supervisor es un loop LLM (arquitectura completa)
@@ -85,7 +85,7 @@ def _tools_supervisor() -> list[dict]:
         t("verificar_cotizacion", "Audita la cotizacion. Devuelve las fallas para que "
           "decidas que rehacer.", {}, []),
         t("escribir_memoria", "Guarda algo en la sesion para el proximo turno.",
-          {"clave": {"type": "string"}, "valor": {}}, ["clave", "valor"]),
+          {"clave": {"type": "string"}, "valor": {"type": "string"}}, ["clave", "valor"]),
     ]
 
 

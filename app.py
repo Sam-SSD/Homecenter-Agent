@@ -1,4 +1,4 @@
-"""UI de demo. Sin diseno a proposito: la traza vale mas puntos que el CSS.
+﻿"""UI de demo. Sin diseno a proposito: la traza vale mas puntos que el CSS.
 
   streamlit run app.py
 """
@@ -34,7 +34,7 @@ with st.sidebar:
         memoria.olvidar(sesion)
         st.session_state.clear()
         st.rerun()
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    from src import llm as _llm
         st.warning("Sin ANTHROPIC_API_KEY: solo funciona el modo determinista.")
 
 if st.session_state.pop("ejecutar", False):

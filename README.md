@@ -19,8 +19,26 @@ puede repetir sin miedo.** En Git Bash o Linux cambia `.venv\Scripts\python` por
 ```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
-Copy-Item .env.example .env      # y pega ANTHROPIC_API_KEY dentro
+Copy-Item .env.example .env
 ```
+
+Abre `.env` y pon tus llaves de Gemini separadas por coma:
+
+```
+GEMINI_API_KEYS=AIza...uno,AIza...dos,AIza...tres
+GEMINI_MODELOS=gemini-2.5-flash
+```
+
+Verifica que responden y averigua qué modelos soporta tu llave:
+
+```powershell
+.venv\Scripts\python -m src.llm             # prueba cada llave una por una
+.venv\Scripts\python -m src.llm --modelos   # lista los modelos disponibles
+```
+
+Ese segundo comando le pregunta a la API, así que te da los identificadores
+exactos que tu llave puede usar. Pon los que quieras en `GEMINI_MODELOS`, en
+orden de preferencia.
 
 ### Paso 1 — ver el estado antes de tocar nada
 
@@ -139,6 +157,41 @@ Detalles de robustez en `ingest/fetch.py`:
   de cache, para que un proceso muerto a mitad no deje archivos huérfanos
   invisibles al parseo. `ingest.estado` reporta huérfanos si aparecen.
 
+
+## LLM: pool de llaves y cadena de fallback
+
+`src/llm.py` es la única parte del proyecto que sabe qué proveedor hay debajo. Los
+agentes hablan con `generar()` en un formato neutro, así que rotar llaves o cambiar
+de proveedor no toca ni una línea de `src/supervisor.py` ni de `src/subagentes.py`.
+
+**Orden de intentos:** para cada modelo de `GEMINI_MODELOS`, prueba cada llave
+disponible de `GEMINI_API_KEYS`. Si el modelo no existe pasa al siguiente modelo.
+
+**Clasificación de errores**, que es lo que hace útil el fallback:
+
+| Error | Qué hace | Efecto en la llave |
+|---|---|---|
+| `API key not valid`, 401, 403 | rota a la siguiente llave | **inhabilitada** el resto de la sesión |
+| 429, `RESOURCE_EXHAUSTED`, quota | rota a la siguiente llave | enfría `LLM_COOLDOWN_S` segundos (60 por defecto) |
+| 500, 503, timeout, `overloaded` | rota a la siguiente llave | enfría 5 segundos |
+| 404, `not found` (modelo) | pasa al siguiente **modelo** | no penaliza la llave |
+
+Cuando se agotan llaves y modelos lanza `SinLlavesDisponibles` con el detalle de
+cuántos intentos hubo y el último error, en vez de fallar en silencio.
+
+Cada fallback queda registrado en la traza como paso `fallback`, así que en la demo
+se ve en pantalla si una llave se cayó y otra la reemplazó.
+
+Para volver a Anthropic sin tocar código: `LLM_PROVEEDOR=anthropic` y
+`ANTHROPIC_API_KEY=...` en `.env`.
+
+Verificación sin gastar llamadas reales:
+
+```powershell
+.venv\Scripts\python -m evals.prove      # el componente 9 simula 429, 503 y modelo inexistente
+```
+
+---
 
 ## Arquitectura
 

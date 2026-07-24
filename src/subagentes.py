@@ -3,7 +3,7 @@ su propio subconjunto de herramientas. Si fuera una sola llamada al LLM seria un
 funcion, no un agente."""
 from __future__ import annotations
 import json
-from src import catalogo, loop, prompts, tools
+from src import catalogo, llm, loop, prompts, tools
 from src.schemas import Espacio, Producto, Requerimiento
 
 
@@ -18,9 +18,9 @@ def cuantificar(espacio: Espacio, traza) -> list[Requerimiento]:
     ejecutores = {
         "listar_reglas": tools.listar_reglas,
         "consultar_guia": tools.consultar_guia,
-        "calcular_cantidad": lambda regla_id, espacio: tools.calcular_cantidad(regla_id, payload),
-        "entregar_requerimientos": lambda requerimientos: {"ok": True, "n": len(requerimientos),
-                                                           "requerimientos": requerimientos},
+        "calcular_cantidad": lambda regla_id, **_: tools.calcular_cantidad(regla_id, payload),
+        "entregar_requerimientos": lambda requerimientos=None, **_: {"ok": True,
+            "requerimientos": llm.como_lista(requerimientos)},
     }
     r = loop.correr("cuantificador", prompts.CUANTIFICADOR, objetivo,
                     tools.tools_cuantificador(), ejecutores, traza)
@@ -44,12 +44,13 @@ def comprar(requerimientos: list[Requerimiento], traza) -> dict[str, dict[str, P
     ejecutores = {
         "buscar_catalogo": tools.buscar_catalogo,
         "validar_en_vivo": tools.validar_en_vivo,
-        "entregar_candidatos": lambda candidatos, justificaciones=None, sin_candidatos=None: {
-            "ok": True, "candidatos": candidatos, "sin_candidatos": sin_candidatos or []},
+        "entregar_candidatos": lambda candidatos=None, justificaciones=None, sin_candidatos=None, **_: {
+            "ok": True, "candidatos": llm.como_dict(candidatos),
+            "sin_candidatos": llm.como_lista(sin_candidatos)},
     }
     r = loop.correr("comprador", prompts.COMPRADOR, objetivo,
                     tools.tools_comprador(), ejecutores, traza)
-    crudos = (r.get("entrega") or {}).get("candidatos") or {}
+    crudos = llm.como_dict((r.get("entrega") or {}).get("candidatos"))
 
     # GUARDRAIL: solo sobreviven los SKUs que existen de verdad en el catalogo.
     salida: dict[str, dict[str, Producto]] = {}

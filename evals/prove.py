@@ -174,13 +174,59 @@ def c8_observabilidad() -> None:
             str(t.herramientas_usadas()))
 
 
-def c9_llm() -> None:
-    titulo(9, "Los tres loops agenticos (requiere ANTHROPIC_API_KEY)",
+def c9_fallback_llaves() -> None:
+    titulo(9, "Fallback de llaves y modelos del LLM", "src/llm.py")
+    from src import llm
+    guardado = (llm.POOL, llm.MODELOS, llm._llamar_gemini)
+    try:
+        llm.POOL = [llm.Llave("k-uno", "key1:...uno"),
+                    llm.Llave("k-dos", "key2:...dos"),
+                    llm.Llave("k-tres", "key3:...tres")]
+        llm.MODELOS = ["modelo-fantasma", "modelo-bueno"]
+        intentos: list[tuple[str, str]] = []
+
+        def falso(llave, modelo, system, historial, tools, max_tokens):
+            intentos.append((modelo, llave.etiqueta))
+            if modelo == "modelo-fantasma":
+                raise RuntimeError("404 models/modelo-fantasma is not found")
+            if llave.valor == "k-uno":
+                raise RuntimeError("429 RESOURCE_EXHAUSTED: quota exceeded")
+            if llave.valor == "k-dos":
+                raise RuntimeError("503 UNAVAILABLE: model is overloaded")
+            return llm.Respuesta(texto="OK", modelo=modelo, llave=llave.etiqueta)
+
+        llm._llamar_gemini = falso
+        r = llm.generar("", [{"rol": "usuario", "texto": "x"}], [], 16)
+        chequeo("modelo inexistente -> pasa al siguiente modelo",
+                intentos[0][0] == "modelo-fantasma" and r.modelo == "modelo-bueno",
+                f"{len(intentos)} intentos: {intentos}")
+        chequeo("cuota agotada (429) -> rota a la siguiente llave",
+                llm.POOL[0].motivo == "cuota" and not llm.POOL[0].disponible)
+        chequeo("error transitorio (503) -> rota y enfria brevemente",
+                llm.POOL[1].motivo == "transitorio")
+        chequeo("responde con la tercera llave", r.llave == "key3:...tres", r.texto)
+
+        for k in llm.POOL:
+            k.matar("prueba")
+        try:
+            llm.generar("", [{"rol": "usuario", "texto": "x"}], [], 16)
+            chequeo("sin llaves disponibles -> error claro", False)
+        except llm.SinLlavesDisponibles as e:
+            chequeo("sin llaves disponibles -> error claro", True, str(e)[:70])
+    finally:
+        llm.POOL, llm.MODELOS, llm._llamar_gemini = guardado
+
+
+def c10_llm() -> None:
+    titulo(10, "Los tres loops agenticos (requiere llaves reales)",
            "src/loop.py, src/supervisor.py")
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("  [SALTADO] sin ANTHROPIC_API_KEY. Corre: python -m evals.prove --con-llm")
+    from src import llm
+    if not llm.POOL and llm.PROVEEDOR == "gemini":
+        print("  [SALTADO] sin GEMINI_API_KEYS en .env")
+        print("            configura y corre: python -m evals.prove --con-llm")
         return
     from src import qa, supervisor
+    print(f"  proveedor={llm.PROVEEDOR} modelos={llm.MODELOS} llaves={len(llm.POOL)}")
     e = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
     cot, traza = supervisor.correr_agentico(e, sesion="prove-llm")
     chequeo("el supervisor produjo cotizacion", cot is not None)
@@ -193,7 +239,8 @@ def c9_llm() -> None:
     print(f"\n  Q&A fundamentado: {r['respuesta'][:220]}")
     r2 = qa.responder("cual es la capital de Mongolia", cot, traza)
     chequeo("el Q&A dice que no sabe fuera del corpus",
-            "no tengo informacion verificada" in r2["respuesta"].lower(), r2["respuesta"][:90])
+            "no tengo informacion verificada" in r2["respuesta"].lower()
+            or "no tengo información verificada" in r2["respuesta"].lower(), r2["respuesta"][:90])
 
 
 def main() -> int:
@@ -205,10 +252,11 @@ def main() -> int:
         print("  python -m ingest.build_index --fuente evals/fixture_productos.json")
         return 1
     for f in (c1_guardrails, c2_retrieval, c3_reglas_sin_aritmetica_del_llm, c4_aislamiento,
-              c5_negociacion, c6_autocorreccion, c7_memoria, c8_observabilidad):
+              c5_negociacion, c6_autocorreccion, c7_memoria, c8_observabilidad,
+              c9_fallback_llaves):
         f()
     if a.con_llm:
-        c9_llm()
+        c10_llm()
     malos = [n for n, ok in resultados if not ok]
     print(f"\n{'='*74}\n{len(resultados) - len(malos)}/{len(resultados)} chequeos en verde")
     for n in malos:

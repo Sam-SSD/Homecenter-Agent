@@ -1,4 +1,4 @@
-"""Las herramientas, con sus schemas y sus ejecutores.
+﻿"""Las herramientas, con sus schemas y sus ejecutores.
 
 El aislamiento de informacion se implementa AQUI: cada rol recibe una lista de
 tools distinta. El Cuantificador no tiene ninguna herramienta que devuelva
@@ -99,8 +99,8 @@ T_CALCULAR = _t("calcular_cantidad",
     "Ejecuta una regla de cuantificacion sobre el espacio y devuelve la cantidad con "
     "su formula sustituida. El calculo lo hace Python, no tu.",
     {"regla_id": {"type": "string"},
-     "espacio": {"type": "object", "description": "el espacio recibido, tal cual"}},
-    ["regla_id", "espacio"])
+    },
+    ["regla_id"])
 
 T_BUSCAR = _t("buscar_catalogo",
     "Busca productos reales en el snapshot del catalogo de Homecenter. Devuelve sku, "
