@@ -549,6 +549,60 @@ def c9_fallback_llaves() -> None:
         llm.POOL, llm.MODELOS, llm._llamar_gemini = guardado
 
 
+def c9b_args_inventados() -> None:
+    titulo("9b", "El loop tolera argumentos inventados por el modelo",
+           "agentes/loop.py")
+    # Visto en demo con gemini-3.5-flash-lite: el modelo llamaba
+    # delegar_cuantificacion(espacio=...) y variantes 11 veces seguidas; cada
+    # TypeError quemaba una iteracion y el supervisor moria en max_iter=14 sin
+    # armar_presupuesto. El filtro convierte el invento en llamada exitosa.
+    from agentes import llm, loop
+    from dominio.traza import Traza
+
+    def sin_params():
+        return {"ok": True}
+    args, ignorados = loop._filtrar_args(sin_params, {"espacio": 1, "largo_m": 2})
+    chequeo("kwargs inventados a una tool sin parametros se descartan",
+            args == {} and set(ignorados) == {"espacio", "largo_m"}, str(sorted(ignorados)))
+
+    def con_params(regla_id, otro=1):
+        return regla_id
+    args, ignorados = loop._filtrar_args(con_params, {"regla_id": "x", "invento": True})
+    chequeo("los kwargs validos se conservan y solo cae el invento",
+            args == {"regla_id": "x"} and ignorados == ["invento"])
+
+    def con_var_kwargs(**kw):
+        return kw
+    args, ignorados = loop._filtrar_args(con_var_kwargs, {"a": 1})
+    chequeo("una tool con **kwargs recibe todo tal cual",
+            args == {"a": 1} and not ignorados)
+
+    llamados = {"n": 0}
+
+    def delegar():
+        llamados["n"] += 1
+        return {"ok": True}
+
+    respuestas = iter([
+        llm.Respuesta(llamadas=[llm.Llamada("delegar", {"espacio": {"tipo": "bano"}}, "1")]),
+        llm.Respuesta(texto="listo"),
+    ])
+    original = loop.llm.generar
+    t = Traza("prove-args")
+    try:
+        loop.llm.generar = lambda *a, **k: next(respuestas)
+        r = loop.correr("supervisor", "", "objetivo", [], {"delegar": delegar}, t)
+    finally:
+        loop.llm.generar = original
+    chequeo("la llamada con args inventados SI ejecuta la tool, no quema la iteracion",
+            llamados["n"] == 1 and r["iteraciones"] == 2,
+            f"ejecuciones={llamados['n']} iteraciones={r['iteraciones']}")
+    chequeo("el descarte queda en la traza como paso 'descartado', no en silencio",
+            any(p["tipo"] == "descartado" and "espacio" in p["detalle"] for p in t.pasos))
+    chequeo("cero error_tool: el invento ya no revienta en TypeError",
+            not any(p["tipo"] == "error_tool" for p in t.pasos))
+
+
 def c10_llm() -> None:
     titulo(10, "Los tres loops agenticos (requiere llaves reales)",
            "agentes/loop.py, agentes/supervisor.py")
@@ -590,7 +644,7 @@ def main() -> int:
     for f in (c1_guardrails, c2_retrieval, c3_reglas_sin_aritmetica_del_llm, c4_aislamiento,
               c5_negociacion, c6_autocorreccion, c7_memoria, c8_observabilidad,
               c8b_cuantificador_no_transcribe, c_reglas_bien_formadas,
-              c_reglas_con_datos_reales, c9_fallback_llaves):
+              c_reglas_con_datos_reales, c9_fallback_llaves, c9b_args_inventados):
         f()
     if a.con_llm:
         c10_llm()
