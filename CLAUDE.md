@@ -55,7 +55,7 @@ config/     fuente versionada: categorias de Homecenter (categorias.py) y las
 datos/      artefactos generados y gitignored: catalogo.db, productos.json,
             guias.json, memoria.db. Se regeneran del pipeline de ingesta.
 ingesta/    scraping y parseo (fetch, parse, build_index, sanity, estado, healthcheck).
-pruebas/    prove.py (145 chequeos), cases.yaml, fixtures.
+pruebas/    prove.py (163 chequeos), cases.yaml, fixtures.
 run.py, app.py   entrypoints, en la raiz (streamlit y python ponen el directorio
                  del script en sys.path, asi que no pueden vivir en una subcarpeta).
 ```
@@ -77,7 +77,7 @@ python -m ingesta.healthcheck                          # correr otra vez 7:45 de
 
 # sin red / sin API key
 python -m ingesta.build_index --fuente pruebas/fixture_productos.json
-python -m pruebas.prove                                 # 145 chequeos, 12 componentes
+python -m pruebas.prove                                 # 163 chequeos, 13 componentes
 python run.py --largo 2 --ancho 2 --presupuesto 2000000 --deterministico
 
 # completo
@@ -87,7 +87,7 @@ streamlit run app.py
 ```
 
 ## Estado actual
-- NÃºcleo determinista: **funcionando**, 145/145 en `prove.py` contra datos reales,
+- NÃºcleo determinista: **funcionando**, 163/163 en `prove.py` contra datos reales,
   para los 4 ambientes (baÃ±o, cocina, habitaciÃ³n, sala).
 - Loops LLM: **probados con llave real** en baÃ±o. `--con-llm` se mantiene solo
   en baÃ±o por cuota (ver abajo); cocina/habitaciÃ³n/sala se cubren de forma
