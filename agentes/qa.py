@@ -6,7 +6,9 @@ import json
 from agentes import llm, loop, prompts, tools
 from dominio.schemas import Cotizacion
 
-MAX_ITER = 6
+# Una pregunta con comparacion completa gasta ~5 turnos (buscar + 2 fichas +
+# comparar + respuesta); con 6 no habia margen para un solo reintento del modelo.
+MAX_ITER = 10
 
 
 def responder(pregunta: str, cotizacion: Cotizacion | None, traza,

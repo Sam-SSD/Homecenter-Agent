@@ -16,8 +16,8 @@ def _filtrar_args(fn, args: dict) -> tuple[dict, list[str]]:
 
     Los modelos debiles inventan argumentos para tools que no los declaran
     (p.ej. delegar_cuantificacion(espacio=...)): sin este filtro cada invento
-    revienta en TypeError, quema una iteracion del loop y con max_iter=14 el
-    supervisor puede morir sin llamar armar_presupuesto (visto en demo con
+    revienta en TypeError, quema una iteracion del loop y con el antiguo
+    max_iter=14 el supervisor moria sin llamar armar_presupuesto (visto en demo con
     gemini-3.5-flash-lite: 11 iteraciones seguidas perdidas en variaciones del
     mismo invento). Descartar es seguro: el dato que el modelo 'aporta' ya vive
     en el closure del ejecutor. Si la funcion acepta **kwargs, pasa todo tal
@@ -34,9 +34,15 @@ def _filtrar_args(fn, args: dict) -> tuple[dict, list[str]]:
 
 
 def correr(actor: str, system: str, objetivo: str, tools: list[dict],
-           ejecutores: dict, traza, max_iter: int = 14) -> dict:
+           ejecutores: dict, traza, max_iter: int = 30) -> dict:
     """Devuelve {'entrega': ..., 'texto': ..., 'iteraciones': n}.
-    Un sub-agente termina llamando su tool de entrega; el resultado se captura."""
+    Un sub-agente termina llamando su tool de entrega; el resultado se captura.
+
+    max_iter es un freno anti-loop-infinito, no control de gasto: una corrida
+    sana termina sola (entrega o respuesta sin llamadas) mucho antes del techo,
+    y morir en el limite desperdicia TODOS los requests ya gastados. Con 14 el
+    comprador (12 conceptos de a una busqueda por turno en modelos lite) no
+    tenia margen."""
     historial: list[dict] = [{"rol": "usuario", "texto": objetivo}]
     entrega = None
 
