@@ -23,7 +23,15 @@ datos/      artefactos generados y gitignored: catalogo.db, productos.json,
             guias.json, memoria.db. Se regeneran del pipeline de ingesta.
 ingesta/    scraping y parseo (fetch, parse, build_index, sanity, estado,
             healthcheck, probar_parser).
-pruebas/    prove.py (145 chequeos), cases.yaml, fixture_productos.json,
+api/        servidor HTTP (FastAPI) para el frontend: POST /corrida publica la
+            traza como Server-Sent Events colgado de Traza(on_paso=...),
+            POST /qa envuelve el Q&A, GET /salud y GET /catalogo. No toca
+            dominio/ ni agentes/.
+mobile/     frontend web + movil (un solo codigo: Expo Router +
+            react-native-web). Traza del loop en vivo, cotizacion con fotos,
+            aprobacion humana por gesto y chat de preguntas. Web es la
+            plataforma principal.
+pruebas/    prove.py (157 chequeos), cases.yaml, fixture_productos.json,
             fixtures/ (datos de prueba: dump del sitemap, HTML de ejemplo).
 run.py, app.py   entrypoints, en la raiz del repo (streamlit y python ponen el
                  directorio del script en sys.path, asi que no viven en una
@@ -166,6 +174,86 @@ desde datos reales todavía.
 
 ---
 
+## La app completa: API + frontend web en tiempo real
+
+Dos procesos, dos terminales. La UI Streamlit (`app.py`) sigue funcionando como
+respaldo; esta es la experiencia principal.
+
+### Requisitos (una sola vez)
+
+- Node 20 LTS o más nuevo ([nodejs.org](https://nodejs.org)) — npm viene incluido.
+- El Paso 0 del runbook ya hecho (`.venv` con `requirements.txt`, que incluye
+  FastAPI y uvicorn).
+
+```powershell
+cd mobile
+npm install
+cd ..
+```
+
+### Terminal 1 — el backend HTTP
+
+```powershell
+.venv\Scripts\python -m uvicorn api.servidor:app --port 8000
+```
+
+**Desde la raíz del repo, siempre**: `datos/catalogo.db`,
+`config/reglas_obra.yaml` y `datos/memoria.db` son rutas relativas al
+directorio de trabajo. Verifica que respira:
+
+```powershell
+curl.exe http://localhost:8000/salud
+# {"ok":true,"catalogo":{"productos":2804,...},"llaves":{...},"modos":[...]}
+```
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /salud` | conteo del catálogo + estado del pool de llaves (no gasta cuota) |
+| `POST /corrida` | corre la cotización y publica cada paso de la traza como SSE (`evento paso`), la cotización completa al final (`evento cotizacion`) y el resumen (`evento fin`) |
+| `POST /qa` | una pregunta sobre la cotización → `{respuesta, herramientas}` |
+| `GET /catalogo` | búsqueda FTS: `?q=&categoria=&limite=` |
+
+### Terminal 2 — el frontend
+
+```powershell
+cd mobile
+npm run web
+```
+
+Se abre solo en `http://localhost:8081`. Si el backend corre en otra máquina o
+puerto, crea `mobile/.env` a partir de `mobile/.env.example` con
+`EXPO_PUBLIC_API_URL=http://<host>:<puerto>` (Expo lo inyecta en build time:
+reinicia `npm run web` después de cambiarlo).
+
+### Los tres modos, en la pantalla de inicio
+
+| Modo | Qué corre | Cuándo usarlo |
+|---|---|---|
+| **Determinista** (defecto) | el pipeline sin LLM, vía SSE real | demo principal: instantáneo, repetible, cero cuota |
+| **Agéntico** | los 3 loops LLM completos | el pitch del multi-agente — **gasta ~35 requests de una cuota de 20/día/modelo**, úsalo contadas veces |
+| **Demo** | traza congelada en el cliente, sin backend | plan B si el backend se cae; muestra el badge MODO DEMO y el chat responde con el mock local |
+
+La app hace ping a `/salud` al abrir: si el backend no responde, se
+deshabilitan los modos en vivo y cae sola a Demo. El flujo completo:
+inicio (mapa de casa, medidas, tope) → `/obra` (traza del loop en vivo) →
+`/cotizacion` (productos con foto, "ver otra opción", aprobación por gesto) →
+`/qa` (chat con el agente) · `/catalogo` (explorador de los 2.885 productos).
+
+### Verificación rápida del streaming
+
+```powershell
+curl.exe --no-buffer -N -X POST http://localhost:8000/corrida `
+  -H "Content-Type: application/json" `
+  -d '{\"espacio\":{\"tipo\":\"bano\",\"largo_m\":2,\"ancho_m\":2,\"presupuesto_cop\":2000000},\"deterministico\":true}'
+```
+
+Deben llegar eventos `paso` uno por uno y un `cotizacion` con el JSON completo
+al final. Ojo: en modo determinista todo corre en ~300 ms, así que llegan casi
+juntos por velocidad legítima — la prueba real de que no hay buffering es el
+modo agéntico, donde los huecos entre eventos son de segundos.
+
+---
+
 ## Garantías de reanudación
 
 Qué pasa si vuelves a lanzar cada paso:
@@ -259,7 +347,7 @@ audita.
 | 5 | Negociación bajo restricción | `dominio/negociador.py` | recortes explicados en pesos; fases de obra por el campo `fase` de cada regla |
 | 6 | Auto-corrección | `dominio/verificador.py` | atrapa SKU inventado, aritmética alterada y omisión de esenciales (por ambiente) |
 | 7 | Memoria de sesión | `dominio/memoria.py` | el 2º turno sube el tope y no re-cuantifica |
-| 8 | Observabilidad | `dominio/traza.py`, `pruebas/` | `python -m pruebas.prove` → 145 chequeos, incluidos dos que verifican que cada regla del YAML tiene fórmula bien formada y resuelve a producto real en su ambiente |
+| 8 | Observabilidad | `dominio/traza.py`, `pruebas/` | `python -m pruebas.prove` → 157 chequeos, incluidos dos que verifican que cada regla del YAML tiene fórmula bien formada y resuelve a producto real en su ambiente. La misma traza que imprime la consola es la que `api/servidor.py` publica por SSE: un solo mecanismo (`Traza(on_paso=...)`) alimenta consola, Streamlit y el frontend |
 
 `python -m pruebas.prove` imprime cada componente haciendo su trabajo, con el
 archivo donde vive. Es la respuesta a "¿esto está mockeado?".
