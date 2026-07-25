@@ -12,7 +12,9 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "streamlit>=1.35",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
 ]
 
 [tool.setuptools]
-packages = ["dominio", "agentes", "config", "ingesta", "pruebas"]
+packages = ["dominio", "agentes", "config", "ingesta", "pruebas", "api"]

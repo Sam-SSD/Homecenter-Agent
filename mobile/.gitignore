@@ -1,0 +1,17 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Nativo generado por `expo prebuild` — se regenera, no se versiona
+android/
+ios/
+
+*.apk
+*.aab
+.env
+.env.local
+npm-debug.*
+*.orig.*
+package-lock.json

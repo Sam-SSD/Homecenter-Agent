@@ -55,13 +55,87 @@ def _mayor_opcional(seleccion, candidatos, prioridades):
     return max(cands) if cands else None
 
 
+def fijar_en_candidatos(candidatos: dict[str, dict[str, Producto]],
+                        swaps: dict[str, str] | None) -> list[str]:
+    """Colapsa las 3 gamas de un concepto al producto que el usuario fijo a
+    mano. Con las 3 gamas iguales, _mejor_downgrade nunca encuentra ahorro
+    positivo para ese concepto (queda protegido de la escalera de recortes)
+    y el bucle de upgrades nunca le ofrece "subir de gama" porque ya esta en
+    todas. _mayor_opcional SI puede sacarlo (ver sustituir() y armar()): un
+    pin es una preferencia, no una garantia de que quepa en el presupuesto.
+
+    Recibe `candidatos` y lo muta in-place antes de llamar a armar(). Nunca
+    inyecta un Producto que la UI construyo: siempre re-consulta el catalogo
+    por SKU, para que un swap viejo con precio desactualizado no cause
+    precio_alterado en el verificador.
+
+    Devuelve los conceptos huerfanos: el swap ya no aplica (cambio de
+    ambiente/tamaño, o el SKU salio del catalogo)."""
+    from dominio import catalogo
+    huerfanos = []
+    for concepto, sku in (swaps or {}).items():
+        prod = catalogo.por_sku(sku)
+        if concepto not in candidatos or not prod:
+            huerfanos.append(concepto)
+            continue
+        candidatos[concepto] = {g: prod for g in ORDEN_GAMA}
+    return huerfanos
+
+
+def sustituir(cot: Cotizacion, concepto: str, sku: str) -> tuple[bool, str]:
+    """Cambio manual de producto disparado por la UI. Determinista: el LLM
+    nunca llama esto (regla 2 y 4 de CLAUDE.md, ver agentes/subagentes.py).
+
+    Reconstruye el ItemCotizado con _item(), que recalcula unidades_a_comprar
+    via unidades_necesarias() y fija subtotal = unidades * precio: por eso
+    'aritmetica' y 'cantidad_insuficiente' no pueden dispararse en el
+    verificador para un swap valido. Re-consulta el catalogo por SKU en vez
+    de confiar en el Producto que trae la UI, por la misma razon que
+    fijar_en_candidatos."""
+    from dominio import catalogo
+    idx = next((k for k, i in enumerate(cot.items) if i.concepto == concepto), None)
+    if idx is None:
+        return False, f"{concepto} ya no esta en la cotizacion"
+    prod = catalogo.por_sku(str(sku))
+    if not prod:
+        return False, f"el SKU {sku} no existe en el catalogo"
+    it = cot.items[idx]
+    nuevo = _item(it.requerimiento, prod, _gama_estimada(it.concepto, it.requerimiento, prod, it.gama))
+    nuevo.fijado_por_usuario = True
+    cot.items[idx] = nuevo
+    cot.aprobada_por_humano = False  # la canasta cambio despues de aprobar
+    cot.recalcular()
+    return True, f"{concepto}: {prod.nombre[:50]} — ${nuevo.subtotal_cop:,}"
+
+
+def _gama_estimada(concepto: str, req: Requerimiento, prod: Producto, gama_previa: str) -> str:
+    """Etiqueta de display para un producto elegido a mano: la gama de las 3
+    (economico/media/premium) mas cercana en precio. Nunca un cuarto valor:
+    ORDEN_GAMA.index(gama) en armar() revienta con algo fuera de las 3."""
+    from dominio import catalogo
+    from config.categorias import CONCEPTO_A_CATEGORIA
+    disponibles = catalogo.gamas(concepto, CONCEPTO_A_CATEGORIA.get(concepto),
+                                 unidad_requerida=req.unidad)
+    if not disponibles:
+        return gama_previa
+    return min(disponibles, key=lambda g: abs(disponibles[g].precio - prod.precio))
+
+
 def armar(espacio: Espacio,
           requerimientos: list[Requerimiento],
           candidatos: dict[str, dict[str, Producto]],
-          tope: int | None = None) -> Cotizacion:
+          tope: int | None = None,
+          fijados: set[str] | None = None) -> Cotizacion:
     """Estrategia, en este orden y es explicable en una frase: primero cede en la
-    gama de los opcionales, luego los saca, y solo entonces toca lo esencial."""
+    gama de los opcionales, luego los saca, y solo entonces toca lo esencial.
+
+    `fijados`: conceptos que el usuario fijo a mano (via fijar_en_candidatos).
+    Ya vienen protegidos de _mejor_downgrade porque sus 3 gamas son el mismo
+    producto (ahorro=0 siempre), pero _mayor_opcional SI puede sacarlos -- un
+    pin es una preferencia, no una garantia de que quepa. Si eso pasa, el
+    recorte lo dice explicitamente en vez de borrar la eleccion en silencio."""
     tope = tope or espacio.presupuesto_cop
+    fijados = fijados or set()
     cot = Cotizacion(espacio=espacio)
 
     seleccion: dict[str, tuple[Requerimiento, str]] = {}
@@ -103,6 +177,8 @@ def armar(espacio: Espacio,
                 monto, concepto = m
                 seleccion.pop(concepto)
                 etiqueta = "opcional" if prioridades == {3} else "no esencial"
+                if concepto in fijados:
+                    etiqueta += ", ERA TU ELECCION"
                 cot.recortes.append(
                     f"saque {concepto} ({etiqueta}) y libere ${monto:,}")
         if total() <= tope:
@@ -113,6 +189,7 @@ def armar(espacio: Espacio,
     cot.recalcular()
 
     if cot.total_cop > tope:
+        cot.minimo_viable_cop = cot.total_cop
         cot.recortes.append(
             f"NO ALCANZA: ni con todos los recortes baja de ${tope:,}. "
             f"Minimo viable ${cot.total_cop:,} (faltan ${cot.total_cop - tope:,})")

@@ -12,7 +12,7 @@ from dominio.schemas import LIMITES, Espacio, Producto, Requerimiento
 
 MODO_OFFLINE = os.environ.get("MODO_OFFLINE") == "1"
 _RE_PRECIO = re.compile(r"\$\s*(\d{1,3}(?:\.\d{3})+)")
-_estado_live = {"fallos": 0, "deshabilitado": MODO_OFFLINE}
+_estado_live = {"fallos": 0, "deshabilitado": MODO_OFFLINE, "ultima_peticion": 0.0}
 
 
 # ---------- conocimiento (sin precios) ----------
@@ -118,7 +118,10 @@ def recomendar_por_specs(consulta: str, specs: dict | None = None,
 
 def validar_en_vivo(sku: str) -> dict:
     """GET al PDP real. Circuit breaker: tras 2 fallos se degrada al snapshot y
-    la UI lo dice explicitamente."""
+    la UI lo dice explicitamente. Respeta robots.txt (permitido()) y el DELAY
+    minimo de 1.8s entre requests (regla 6 de CLAUDE.md): se gatea con un
+    timestamp de ultima peticion a nivel de modulo, en vez de dormir siempre,
+    para no penalizar la primera llamada de cada corrida."""
     base = catalogo.por_sku(str(sku))
     if not base:
         return {"sku": sku, "error": "SKU no esta en el snapshot"}
@@ -126,9 +129,16 @@ def validar_en_vivo(sku: str) -> dict:
         return {"sku": sku, "estado": "snapshot", "precio": base.precio,
                 "capturado_en": base.capturado_en, "en_vivo": False}
     try:
-        from ingesta.fetch import SESSION, BASE
+        from ingesta.fetch import BASE, DELAY, SESSION, permitido
+        url = f"{BASE}/homecenter-co/product/{sku}/x/{sku}/"
+        if not permitido(url):
+            raise RuntimeError("bloqueado por robots.txt")
+        espera = DELAY - (time.time() - _estado_live["ultima_peticion"])
+        if espera > 0:
+            time.sleep(espera)
         t0 = time.time()
-        r = SESSION.get(f"{BASE}/homecenter-co/product/{sku}/x/{sku}/", timeout=5)
+        r = SESSION.get(url, timeout=5)
+        _estado_live["ultima_peticion"] = time.time()
         m = _RE_PRECIO.search(r.text)
         if r.status_code != 200 or not m:
             raise RuntimeError(f"http={r.status_code} precio={'no' if not m else 'si'}")

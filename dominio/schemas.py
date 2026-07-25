@@ -173,6 +173,7 @@ class ItemCotizado(BaseModel):
     gama: str = "media"
     estado_precio: Literal["snapshot", "en_vivo", "cambio"] = "snapshot"
     precio_confirmado: Optional[int] = None
+    fijado_por_usuario: bool = False
 
 
 class Falla(BaseModel):
@@ -193,6 +194,7 @@ class Cotizacion(BaseModel):
     cifras_sin_fuente: list[str] = []
     generada_en: str = Field(default_factory=ahora)
     aprobada_por_humano: bool = False
+    minimo_viable_cop: int = 0
 
     def recalcular(self) -> "Cotizacion":
         self.total_cop = sum(i.subtotal_cop for i in self.items)
