@@ -7,8 +7,8 @@
 """
 from __future__ import annotations
 import argparse, sys
-from src.ejecutar import construir_espacio, cotizar, preguntar
-from src.traza import Traza
+from agentes.ejecutar import construir_espacio, cotizar, preguntar
+from dominio.traza import Traza
 
 
 def imprimir(cot) -> None:
@@ -62,7 +62,7 @@ def main() -> int:
     a = ap.parse_args()
 
     # Los defaults por ambiente (altura_enchape_m=2.0, metros_lineales=3.0,
-    # incluye_ducha=True) los aplica src.schemas.Espacio (DEFAULTS_POR_TIPO):
+    # incluye_ducha=True) los aplica dominio.schemas.Espacio (DEFAULTS_POR_TIPO):
     # una sola fuente de verdad, no duplicada aqui y en app.py. Solo --sin-ducha
     # necesita forzar un valor explicito, porque es lo opuesto al default.
     incluye_ducha = False if a.sin_ducha else None

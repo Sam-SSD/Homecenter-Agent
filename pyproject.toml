@@ -15,4 +15,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["src", "data", "ingest", "evals"]
+packages = ["dominio", "agentes", "config", "ingesta", "pruebas"]

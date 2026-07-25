@@ -5,10 +5,11 @@
 from __future__ import annotations
 import streamlit as st
 
-from src import catalogo, memoria, qa, tools, verificador
-from src.ejecutar import construir_espacio, cotizar
-from src.schemas import LIMITES
-from src.traza import Traza
+from dominio import catalogo, memoria, verificador
+from dominio.schemas import LIMITES
+from dominio.traza import Traza
+from agentes import qa, tools
+from agentes.ejecutar import construir_espacio, cotizar
 
 TITULOS = {"bano": "bano", "cocina": "cocina", "habitacion": "habitacion", "sala": "sala"}
 
@@ -51,7 +52,7 @@ with st.sidebar:
         memoria.olvidar(sesion)
         st.session_state.clear()
         st.rerun()
-    from src import llm as _llm
+    from agentes import llm as _llm
     _est = _llm.estado()
     if _est["proveedor"] != "gemini":
         st.caption(f"proveedor: {_est['proveedor']}")
