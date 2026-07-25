@@ -46,8 +46,9 @@ def cuantificar(espacio: Espacio, traza) -> list[Requerimiento]:
     r = loop.correr("cuantificador", prompts.cuantificador(espacio.tipo), objetivo,
                     tools.tools_cuantificador(), ejecutores, traza,
                     # los modelos lite llaman calcular_cantidad de a una por turno:
-                    # 1 listar + 1 consultar + 12 reglas + la entrega no caben en 14
-                    max_iter=24)
+                    # 1 listar + 1 consultar + 12 reglas + la entrega, mas margen
+                    # para reintentos del modelo
+                    max_iter=30)
     out = list(calculados.values())
     listados = (r.get("entrega") or {}).get("listados")
     if listados is not None and listados != len(out):
