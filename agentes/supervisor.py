@@ -53,7 +53,15 @@ def _ejecutores(espacio: Espacio, traza, sesion: str, estado: dict) -> dict:
         reqs, cands = estado.get("requerimientos"), estado.get("candidatos")
         if not reqs or not cands:
             return {"error": "faltan requerimientos o candidatos"}
-        cot = negociador.armar(espacio, reqs, cands)
+        # Choke point unico: aplicar los swaps manuales del usuario justo antes
+        # de armar(), sin importar cuantas veces el LLM re-corra delegar_compra.
+        swaps = memoria.leer(sesion, "swaps") or {}
+        huerfanos = negociador.fijar_en_candidatos(cands, swaps)
+        for h in huerfanos:
+            traza.paso("sistema", "descartado", f"swap de {h} ya no aplica")
+        cot = negociador.armar(espacio, reqs, cands, fijados=set(swaps))
+        for i in cot.items:
+            i.fijado_por_usuario = i.concepto in swaps
         estado["cotizacion"] = cot
         traza.paso("negociador", "armado",
                    f"total ${cot.total_cop:,} de tope ${espacio.presupuesto_cop:,}, "
@@ -138,7 +146,13 @@ def correr_deterministico(espacio: Espacio, sesion: str = "demo",
         memoria.escribir(sesion, "requerimientos", [r.model_dump() for r in reqs])
     cands = candidatos_de(reqs)
     traza.paso("comprador", "entrega", f"{len(cands)} conceptos con candidatos")
-    cot = negociador.armar(espacio, reqs, cands)
+    swaps = memoria.leer(sesion, "swaps") or {}
+    huerfanos = negociador.fijar_en_candidatos(cands, swaps)
+    for h in huerfanos:
+        traza.paso("sistema", "descartado", f"swap de {h} ya no aplica")
+    cot = negociador.armar(espacio, reqs, cands, fijados=set(swaps))
+    for i in cot.items:
+        i.fijado_por_usuario = i.concepto in swaps
     traza.paso("negociador", "armado", f"total ${cot.total_cop:,}, {len(cot.recortes)} recortes")
     fallas = verificador.verificar(cot)
     traza.paso("verificador", "rechazo" if fallas else "aprobacion",

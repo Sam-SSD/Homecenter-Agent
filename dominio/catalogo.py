@@ -108,27 +108,57 @@ def filtrar_por_concepto(ps: list[Producto], concepto: str) -> list[Producto]:
     return ok or ps
 
 
-def gamas(consulta: str, categorias: list[str] | None = None,
-          unidad_requerida: str | None = None) -> dict[str, Producto]:
-    """Tres opciones por concepto. Es lo que le permite al Negociador recortar.
+def alternativas(consulta: str, categorias: list[str] | None = None,
+                 unidad_requerida: str | None = None, k: int = 200) -> list[Producto]:
+    """Pool completo ordenado por precio para un concepto. Es la fuente tanto
+    de gamas() (que colapsa esto a 3) como del swap manual en la UI (que
+    necesita ver el pool entero, no solo economico/media/premium).
 
     Filtra accesorios por nombre y, cuando la obra se mide en m2/kg/galon,
     prefiere productos que declaren su contenido de venta: si no lo declaran no
-    se puede calcular cuantas cajas comprar."""
-    ps = buscar(consulta, categorias=categorias, k=200)
+    se puede calcular cuantas cajas comprar.
+
+    k=200 no es cosmetico: con k=100 el producto "media" de varios conceptos
+    cambia de SKU (verificado contra las 23 reglas del YAML). No lo bajes sin
+    re-verificar contra pruebas.prove."""
+    ps = buscar(consulta, categorias=categorias, k=k)
     ps = filtrar_por_concepto(ps, consulta)
     if unidad_requerida in ("m2", "kg"):  # galon: la regla ya entrega galones
         con_unidad = [p for p in ps if p.contenido_por_unidad()]
         if con_unidad:
             ps = con_unidad
+    return sorted(ps, key=lambda p: p.precio)
+
+
+def gamas(consulta: str, categorias: list[str] | None = None,
+          unidad_requerida: str | None = None) -> dict[str, Producto]:
+    """Tres opciones por concepto. Es lo que le permite al Negociador recortar."""
+    ps = alternativas(consulta, categorias, unidad_requerida)
     if not ps:
         return {}
-    ps = sorted(ps, key=lambda p: p.precio)
     # Percentiles en vez de min/max: los extremos absolutos suelen ser un
     # accesorio suelto o un producto industrial fuera de contexto.
     def en(frac: float) -> Producto:
         return ps[min(int(len(ps) * frac), len(ps) - 1)]
     return {"economico": en(0.10), "media": en(0.45), "premium": en(0.85)}
+
+
+def opciones(consulta: str, categorias: list[str] | None = None,
+            unidad_requerida: str | None = None, n: int = 20) -> list[Producto]:
+    """n productos repartidos por todo el rango de precio del concepto, para
+    que el usuario elija manualmente. NO son los n mas baratos (eso seria
+    alternativas()[:n]): se muestrea por indice para cubrir economico a
+    premium. Excluye unidad_incierta cuando la obra se mide en m2/kg: esos
+    productos no permiten calcular cuantas cajas/bultos comprar."""
+    ps = alternativas(consulta, categorias, unidad_requerida)
+    if unidad_requerida in ("m2", "kg"):
+        ciertos = [p for p in ps if not p.unidad_incierta]
+        if ciertos:
+            ps = ciertos
+    if len(ps) <= n:
+        return ps
+    idx = sorted({min(int(len(ps) * i / n), len(ps) - 1) for i in range(n)})
+    return [ps[i] for i in idx]
 
 
 def buscar_por_specs(consulta: str, precio_max: int | None = None,
