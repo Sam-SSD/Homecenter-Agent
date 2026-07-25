@@ -31,7 +31,7 @@ mobile/     frontend web + movil (un solo codigo: Expo Router +
             react-native-web). Traza del loop en vivo, cotizacion con fotos,
             aprobacion humana por gesto y chat de preguntas. Web es la
             plataforma principal.
-pruebas/    prove.py (157 chequeos), cases.yaml, fixture_productos.json,
+pruebas/    prove.py (163 chequeos), cases.yaml, fixture_productos.json,
             fixtures/ (datos de prueba: dump del sitemap, HTML de ejemplo).
 run.py, app.py   entrypoints, en la raiz del repo (streamlit y python ponen el
                  directorio del script en sys.path, asi que no viven en una
@@ -347,7 +347,7 @@ audita.
 | 5 | Negociación bajo restricción | `dominio/negociador.py` | recortes explicados en pesos; fases de obra por el campo `fase` de cada regla |
 | 6 | Auto-corrección | `dominio/verificador.py` | atrapa SKU inventado, aritmética alterada y omisión de esenciales (por ambiente) |
 | 7 | Memoria de sesión | `dominio/memoria.py` | el 2º turno sube el tope y no re-cuantifica |
-| 8 | Observabilidad | `dominio/traza.py`, `pruebas/` | `python -m pruebas.prove` → 157 chequeos, incluidos dos que verifican que cada regla del YAML tiene fórmula bien formada y resuelve a producto real en su ambiente. La misma traza que imprime la consola es la que `api/servidor.py` publica por SSE: un solo mecanismo (`Traza(on_paso=...)`) alimenta consola, Streamlit y el frontend |
+| 8 | Observabilidad | `dominio/traza.py`, `pruebas/` | `python -m pruebas.prove` → 163 chequeos, incluidos dos que verifican que cada regla del YAML tiene fórmula bien formada y resuelve a producto real en su ambiente. La misma traza que imprime la consola es la que `api/servidor.py` publica por SSE: un solo mecanismo (`Traza(on_paso=...)`) alimenta consola, Streamlit y el frontend |
 
 `python -m pruebas.prove` imprime cada componente haciendo su trabajo, con el
 archivo donde vive. Es la respuesta a "¿esto está mockeado?".

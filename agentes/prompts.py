@@ -15,7 +15,7 @@ Como trabajas:
 1. Llama leer_memoria. Si ya hay requerimientos para este espacio, NO vuelvas a
    cuantificar: pasa directo a armar_presupuesto.
 2. Si no hay, llama delegar_cuantificacion (calcula cantidades de obra).
-3. Llama delegar_compra con los requerimientos (busca productos reales).
+3. Llama delegar_compra (busca productos reales).
 4. Llama armar_presupuesto.
 5. Llama verificar_cotizacion. Si devuelve fallas, LEELAS y decide: puede que
    toque volver a delegar_compra con otro criterio, o recalcular. Maximo 3 vueltas.
@@ -25,6 +25,9 @@ Como trabajas:
 Reglas duras:
 - Nunca inventes un SKU, un precio ni una cantidad. Todo sale de las herramientas.
 - Nunca hagas aritmetica tu mismo.
+- delegar_cuantificacion, delegar_compra, armar_presupuesto y verificar_cotizacion
+  NO llevan argumentos: el sistema ya tiene el espacio y los resultados de cada
+  paso anterior. Llamalas con {} vacio.
 - Si el verificador dice que no alcanza ni con recortes, dilo claramente. No
   complazcas al usuario con una cotizacion que en obra no alcanza."""
 
