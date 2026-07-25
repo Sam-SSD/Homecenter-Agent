@@ -186,6 +186,30 @@ def c8_observabilidad() -> None:
     chequeo("lista herramientas usadas", len(t.herramientas_usadas()) == 2,
             str(t.herramientas_usadas()))
 
+    # Traza sin on_paso (el default de siempre) sigue funcionando igual: la UI
+    # en vivo agrega un callback opcional, y sin el la traza no debe cambiar.
+    t_sin_callback = Traza("prove-sin-callback")
+    t_sin_callback.paso("supervisor", "armado", "sin callback registrado")
+    chequeo("Traza sin on_paso sigue funcionando (compatibilidad)",
+            len(t_sin_callback.pasos) == 1)
+
+    # Traza con on_paso: cada paso() debe invocar el callback con el mismo dict
+    # que quedo en self.pasos, y un callback que revienta no debe tumbar paso().
+    vistos: list[dict] = []
+    t_con_callback = Traza("prove-con-callback", on_paso=vistos.append)
+    t_con_callback.paso("cuantificador", "piensa", "calculando area")
+    t_con_callback.paso("comprador", "tool_use", "buscar_catalogo(sku=123)")
+    chequeo("on_paso recibe cada paso en vivo", vistos == t_con_callback.pasos,
+            f"{len(vistos)} pasos vistos por el callback")
+
+    def _callback_roto(_p):
+        raise RuntimeError("fallo de render simulado")
+
+    t_callback_roto = Traza("prove-callback-roto", on_paso=_callback_roto)
+    t_callback_roto.paso("supervisor", "entrega", "no debe propagar la excepcion")
+    chequeo("un on_paso que falla no rompe la cotizacion",
+            len(t_callback_roto.pasos) == 1)
+
 
 def c8b_cuantificador_no_transcribe() -> None:
     """REGLA 1: la formula y la fuente las deriva Python, no las copia el LLM.
