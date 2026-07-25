@@ -11,16 +11,32 @@ from __future__ import annotations
 import json
 from agentes import loop, prompts, subagentes, tools
 from dominio import memoria, negociador, verificador
-from dominio.schemas import Cotizacion, Espacio
+from dominio.schemas import Cotizacion, Espacio, Requerimiento
 from dominio.traza import Traza
 
 MAX_VUELTAS = 3
 
 
 def _ejecutores(espacio: Espacio, traza, sesion: str, estado: dict) -> dict:
+    def leer_memoria() -> dict:
+        guardado = memoria.todo(sesion)
+        # El prompt le dice al modelo "si ya hay requerimientos no vuelvas a
+        # cuantificar": sin rehidratar el estado, obedecer esa instruccion lo
+        # deja sin requerimientos y delegar_compra falla.
+        if not estado.get("requerimientos") and guardado.get("requerimientos"):
+            try:
+                estado["requerimientos"] = [Requerimiento(**r)
+                                            for r in guardado["requerimientos"]]
+                traza.paso("supervisor", "memoria_hit",
+                           f"{len(estado['requerimientos'])} requerimientos rehidratados")
+            except Exception as e:  # noqa: BLE001
+                traza.paso("supervisor", "memoria_invalida", str(e)[:120])
+        return {"memoria": guardado}
+
     def delegar_cuantificacion() -> dict:
         reqs = subagentes.cuantificar(espacio, traza)
         estado["requerimientos"] = reqs
+        memoria.escribir(sesion, "requerimientos", [r.model_dump() for r in reqs])
         return {"n": len(reqs), "requerimientos": [r.model_dump() for r in reqs]}
 
     def delegar_compra() -> dict:
@@ -62,7 +78,7 @@ def _ejecutores(espacio: Espacio, traza, sesion: str, estado: dict) -> dict:
                 "fallas": [f.model_dump() for f in fallas]}
 
     return {
-        "leer_memoria": lambda: {"memoria": memoria.todo(sesion)},
+        "leer_memoria": leer_memoria,
         "escribir_memoria": lambda clave, valor: (memoria.escribir(sesion, clave, valor),
                                                   {"ok": True})[1],
         "delegar_cuantificacion": delegar_cuantificacion,

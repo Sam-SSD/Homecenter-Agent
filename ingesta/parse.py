@@ -1,5 +1,6 @@
 """Parseo offline del HTML cacheado. Cero red."""
 from __future__ import annotations
+import json
 import re
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
@@ -151,6 +152,52 @@ def parse_categoria(soup: BeautifulSoup, cat_id: str, categoria: str) -> list[di
             "capturado_en": ahora,
         }))
     return productos
+
+
+def _num(v, tipo):
+    try:
+        return tipo(str(v).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def specs_de_next_data(soup: BeautifulSoup) -> dict[str, dict]:
+    """Specs tecnicas del JSON embebido en __NEXT_DATA__, por SKU. El HTML
+    renderizado no las trae: solo estan aqui. Cualquier fallo devuelve {} para no
+    tumbar el pipeline entero por una pagina rota."""
+    tag = soup.find("script", id="__NEXT_DATA__")
+    if tag is None:
+        return {}
+    try:
+        datos = json.loads(tag.string or tag.get_text())
+        resultados = (datos["props"]["pageProps"]["searchProps"]["searchData"]
+                      .get("results") or [])
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return {}
+
+    por_sku: dict[str, dict] = {}
+    for p in resultados:
+        if not isinstance(p, dict):
+            continue
+        sku = p.get("skuId") or p.get("productId")
+        if not sku:
+            continue
+        specs = {}
+        for h in p.get("highlights") or []:
+            if not isinstance(h, dict):
+                continue
+            k = str(h.get("key") or "").strip()
+            v = str(h.get("value") or "").strip()
+            if k and v:
+                specs[k] = v
+        por_sku[str(sku)] = {
+            "specs": specs,
+            "marca": (p.get("brand") or "").strip() or None,
+            "rating": _num(p.get("rating"), float),
+            "total_reviews": _num(p.get("totalReviews"), int),
+            "modelo": (p.get("model") or "").strip(),
+        }
+    return por_sku
 
 
 def parse_guias(soup: BeautifulSoup, cat_id: str, categoria: str) -> list[dict]:

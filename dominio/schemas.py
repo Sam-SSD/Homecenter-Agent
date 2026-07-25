@@ -31,6 +31,10 @@ class Producto(BaseModel):
     url: str = ""
     imagen_url: Optional[str] = None
     capturado_en: str = ""
+    specs: dict[str, str] = Field(default_factory=dict)
+    rating: Optional[float] = None
+    total_reviews: Optional[int] = None
+    modelo: str = ""
 
     def contenido_por_unidad(self) -> Optional[float]:
         return self.m2_por_caja or self.kg_por_bulto or self.rendimiento_m2

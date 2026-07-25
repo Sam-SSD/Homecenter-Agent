@@ -25,7 +25,10 @@ def responder(pregunta: str, cotizacion: Cotizacion | None, traza) -> dict:
                        for i in cotizacion.items]}, ensure_ascii=False)
     objetivo = f"{contexto}\n\nPregunta: {pregunta}"
     ejecutores = {"consultar_guia": tools.consultar_guia,
-                  "buscar_catalogo": tools.buscar_catalogo}
+                  "buscar_catalogo": tools.buscar_catalogo,
+                  "ficha_producto": tools.ficha_producto,
+                  "comparar_productos": tools.comparar_productos,
+                  "recomendar_por_specs": tools.recomendar_por_specs}
     tipo = cotizacion.espacio.tipo if cotizacion else "bano"
     r = loop.correr("qa", prompts.qa(tipo), objetivo, tools.tools_qa(), ejecutores, traza, max_iter=6)
     return {"respuesta": r["texto"] or "No tengo informacion verificada sobre eso.",

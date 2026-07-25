@@ -47,9 +47,9 @@ def imprimir(cot) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tipo", default="bano", choices=["bano", "cocina", "habitacion", "sala"])
-    ap.add_argument("--largo", type=float, required=True)
-    ap.add_argument("--ancho", type=float, required=True)
-    ap.add_argument("--presupuesto", type=int, required=True)
+    ap.add_argument("--largo", type=float, default=None)
+    ap.add_argument("--ancho", type=float, default=None)
+    ap.add_argument("--presupuesto", type=int, default=None)
     ap.add_argument("--altura-enchape", type=float, default=None,
                     help="solo aplica a bano y cocina (enchape de pared)")
     ap.add_argument("--sin-ducha", action="store_true", help="solo aplica a bano")
@@ -60,6 +60,18 @@ def main() -> int:
                     help="salta el loop LLM del supervisor (red de seguridad de demo)")
     ap.add_argument("--preguntar", default=None, help="pregunta de seguimiento al Q&A")
     a = ap.parse_args()
+
+    geometria = (a.largo, a.ancho, a.presupuesto)
+    if all(g is None for g in geometria):
+        # --preguntar solo: el Q&A de producto no necesita un espacio cotizado.
+        if a.preguntar:
+            print(f"PREGUNTA: {a.preguntar}")
+            print("RESPUESTA:", preguntar(a.preguntar, None, Traza("run")))
+            return 0
+        ap.error("se requieren --largo, --ancho y --presupuesto "
+                 "(o --preguntar para consultar sin cotizar)")
+    if any(g is None for g in geometria):
+        ap.error("--largo, --ancho y --presupuesto van juntos")
 
     # Los defaults por ambiente (altura_enchape_m=2.0, metros_lineales=3.0,
     # incluye_ducha=True) los aplica dominio.schemas.Espacio (DEFAULTS_POR_TIPO):
