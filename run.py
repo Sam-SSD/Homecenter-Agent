@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """CLI end-to-end.
 
-  python run.py --largo 2 --ancho 2 --presupuesto 2000000
-  python run.py --largo 2 --ancho 2 --presupuesto 2000000 --deterministico
-  python run.py --largo 2 --ancho 2 --presupuesto 2500000 --sesion demo   # 2do turno
+  python run.py --tipo bano --largo 2 --ancho 2 --presupuesto 2000000
+  python run.py --tipo cocina --largo 3 --ancho 2.5 --presupuesto 8000000 --deterministico
+  python run.py --tipo bano --largo 2 --ancho 2 --presupuesto 2500000 --sesion demo   # 2do turno
 """
 from __future__ import annotations
 import argparse, sys
-from pydantic import ValidationError
-from src.schemas import Espacio
+from src.ejecutar import construir_espacio, cotizar, preguntar
 from src.traza import Traza
 
 
@@ -17,7 +16,7 @@ def imprimir(cot) -> None:
         print("\nno se produjo cotizacion")
         return
     e = cot.espacio
-    print(f"\n{'='*74}\nCOTIZACION  bano {e.largo_m}x{e.ancho_m} m ({e.area_piso} m2)"
+    print(f"\n{'='*74}\nCOTIZACION  {e.tipo} {e.largo_m}x{e.ancho_m} m ({e.area_piso} m2)"
           f"  tope ${e.presupuesto_cop:,}\n{'='*74}")
     for i in cot.items:
         amarillo = "" if i.requerimiento.regla_verificada else "  (*)"
@@ -47,42 +46,51 @@ def imprimir(cot) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--tipo", default="bano", choices=["bano", "cocina", "habitacion", "sala"])
     ap.add_argument("--largo", type=float, required=True)
     ap.add_argument("--ancho", type=float, required=True)
     ap.add_argument("--presupuesto", type=int, required=True)
-    ap.add_argument("--altura-enchape", type=float, default=2.0)
-    ap.add_argument("--sin-ducha", action="store_true")
+    ap.add_argument("--altura-enchape", type=float, default=None,
+                    help="solo aplica a bano y cocina (enchape de pared)")
+    ap.add_argument("--sin-ducha", action="store_true", help="solo aplica a bano")
+    ap.add_argument("--metros-lineales", type=float, default=None,
+                    help="meson de cocina o closet corrido, cuando aplique")
     ap.add_argument("--sesion", default="cli")
     ap.add_argument("--deterministico", action="store_true",
                     help="salta el loop LLM del supervisor (red de seguridad de demo)")
     ap.add_argument("--preguntar", default=None, help="pregunta de seguimiento al Q&A")
     a = ap.parse_args()
 
-    try:
-        espacio = Espacio(largo_m=a.largo, ancho_m=a.ancho,
-                          altura_enchape_m=a.altura_enchape,
-                          incluye_ducha=not a.sin_ducha,
-                          presupuesto_cop=a.presupuesto)
-    except ValidationError as e:
+    altura_enchape = a.altura_enchape
+    if altura_enchape is None and a.tipo in ("bano", "cocina"):
+        altura_enchape = 2.0
+    incluye_ducha = (not a.sin_ducha) if a.tipo == "bano" else None
+    metros_lineales = a.metros_lineales
+    if metros_lineales is None and a.tipo in ("cocina", "habitacion"):
+        # sin esto, meson_cocina/closet no tienen su variable y la regla no
+        # aplica: el mesón o el closet desaparecen de la cotizacion sin aviso,
+        # y el verificador solo lo atrapa si el concepto es esencial (cocina).
+        metros_lineales = 3.0
+
+    espacio, errores = construir_espacio(
+        tipo=a.tipo, largo_m=a.largo, ancho_m=a.ancho, presupuesto_cop=a.presupuesto,
+        altura_enchape_m=altura_enchape, incluye_ducha=incluye_ducha,
+        metros_lineales=metros_lineales)
+    if espacio is None:
         print("GUARDRAIL rechazo la entrada:")
-        for err in e.errors():
-            print("  -", err["msg"])
+        for msg in errores:
+            print("  -", msg)
         return 2
 
-    from src import supervisor
     traza = Traza("run")
-    print(f"objetivo: bano {espacio.area_piso} m2, tope ${espacio.presupuesto_cop:,}\n")
-    if a.deterministico:
-        cot, traza = supervisor.correr_deterministico(espacio, sesion=a.sesion, traza=traza)
-    else:
-        cot, traza = supervisor.correr_agentico(espacio, sesion=a.sesion, traza=traza)
+    print(f"objetivo: {espacio.tipo} {espacio.area_piso} m2, tope ${espacio.presupuesto_cop:,}\n")
+    cot, traza = cotizar(espacio, sesion=a.sesion, deterministico=a.deterministico, traza=traza)
     imprimir(cot)
     print("\ntraza:", traza.guardar(), "|", traza.resumen())
 
     if a.preguntar and cot:
-        from src import qa
         print(f"\nPREGUNTA: {a.preguntar}")
-        print("RESPUESTA:", qa.responder(a.preguntar, cot, traza)["respuesta"])
+        print("RESPUESTA:", preguntar(a.preguntar, cot, traza))
     return 0
 
 

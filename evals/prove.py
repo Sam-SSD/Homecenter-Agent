@@ -21,6 +21,18 @@ OK, NO = "  [OK]", "  [FALLA]"
 resultados: list[tuple[str, bool]] = []
 
 
+def espacio_bano(**over) -> Espacio:
+    """Bano con enchape/ducha, igual al default que usaban run.py/app.py antes
+    de que altura_enchape_m/incluye_ducha dejaran de tener default en el schema
+    (paso necesario para que sean Optional y no aparezcan en ambientes que no
+    enchapan). Los chequeos que ejercen el set completo de reglas de bano
+    (enchape_pared, adhesivo, boquilla, griferia_ducha) usan este helper."""
+    base = dict(tipo="bano", largo_m=2, ancho_m=2, altura_enchape_m=2.0,
+                incluye_ducha=True, presupuesto_cop=2_000_000)
+    base.update(over)
+    return Espacio(**base)
+
+
 def titulo(n: int, nombre: str, archivo: str) -> None:
     print(f"\n{'='*74}\nCOMPONENTE {n}: {nombre}\n  archivo: {archivo}\n{'='*74}")
 
@@ -66,14 +78,14 @@ def c2_retrieval() -> None:
 
 def c3_reglas_sin_aritmetica_del_llm() -> None:
     titulo(3, "Cuantificacion auditable (el LLM no hace aritmetica)", "src/reglas.py")
-    e = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    e = Espacio(tipo="bano", largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
     r = reglas.calcular("piso_ceramica", e)
     chequeo("formula sustituida es auditable", "=" in r.formula, r.formula)
     chequeo("cantidad correcta (4 m2 + 10% merma)", abs(r.cantidad - 4.4) < 0.01, f"{r.cantidad} m2")
     chequeo("cada cifra declara fuente", bool(r.fuente_regla), r.fuente_regla)
     chequeo("regla no verificada queda marcada", r.regla_verificada is False,
             "se muestra en amarillo en la UI")
-    e2 = Espacio(largo_m=2, ancho_m=2, incluye_ducha=False, presupuesto_cop=2_000_000)
+    e2 = Espacio(tipo="bano", largo_m=2, ancho_m=2, incluye_ducha=False, presupuesto_cop=2_000_000)
     try:
         reglas.calcular("griferia_ducha", e2)
         chequeo("omite conceptos que no aplican", False)
@@ -83,7 +95,7 @@ def c3_reglas_sin_aritmetica_del_llm() -> None:
 
 def c4_aislamiento() -> None:
     titulo(4, "Multi-agente con aislamiento de informacion", "src/subagentes.py, src/tools.py")
-    e = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    e = Espacio(tipo="bano", largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
     payload = e.sin_presupuesto()
     chequeo("el Cuantificador NO recibe el presupuesto", "presupuesto_cop" not in payload,
             f"claves: {sorted(payload)[:6]}...")
@@ -100,7 +112,7 @@ def c4_aislamiento() -> None:
 def c5_negociacion() -> None:
     titulo(5, "Negociador determinista bajo restriccion", "src/negociador.py")
     for pres in (6_000_000, 2_000_000, 1_200_000):
-        e = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=pres)
+        e = espacio_bano(presupuesto_cop=pres)
         cot, fallas, _, _ = cotizar(e)
         uso = 100 * cot.total_cop // pres
         # Invariante: entra en el tope, y la holgura queda EXPLICADA (aprovechada
@@ -110,7 +122,7 @@ def c5_negociacion() -> None:
                 cot.total_cop <= pres and explicada,
                 f"total ${cot.total_cop:,} ({uso}%), {len(cot.recortes)} recortes, "
                 f"{len(cot.alternativas)} upgrades ofrecidos")
-    e = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    e = espacio_bano()
     cot, _, _, _ = cotizar(e)
     chequeo("los recortes se explican en pesos",
             any("libere $" in r for r in cot.recortes), cot.recortes[0][:70] if cot.recortes else "")
@@ -120,7 +132,7 @@ def c5_negociacion() -> None:
 def c6_autocorreccion() -> None:
     titulo(6, "Auto-correccion: el verificador rechaza y el loop lo observa",
            "src/verificador.py")
-    e = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    e = espacio_bano()
     cot, fallas, reqs, _ = cotizar(e)
     chequeo("cotizacion valida pasa el verificador", not fallas,
             f"{len(cot.items)} items, 0 fallas")
@@ -147,11 +159,11 @@ def c7_memoria() -> None:
     from src import supervisor
     ses = "prove-memoria"
     memoria.olvidar(ses)
-    e1 = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    e1 = espacio_bano()
     cot1, t1 = supervisor.correr_deterministico(e1, sesion=ses, traza=Traza("t1"))
     chequeo("turno 1 cuantifica y guarda", memoria.leer(ses, "requerimientos") is not None,
             f"total ${cot1.total_cop:,}")
-    e2 = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_500_000)
+    e2 = espacio_bano(presupuesto_cop=2_500_000)
     cot2, t2 = supervisor.correr_deterministico(e2, sesion=ses, traza=Traza("t2"))
     hit = any(p["tipo"] == "memoria_hit" for p in t2.pasos)
     chequeo("turno 2 reusa requerimientos de memoria", hit,
@@ -187,7 +199,7 @@ def c8b_cuantificador_no_transcribe() -> None:
     from src.traza import Traza
 
     t = Traza("prove-transcribe")
-    espacio = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    espacio = Espacio(tipo="bano", largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
     capturado: dict = {}
 
     def loop_falso(actor, system, objetivo, tools_, ejecutores, traza, max_iter=14):
@@ -217,6 +229,84 @@ def c8b_cuantificador_no_transcribe() -> None:
             any(p.get("tipo") == "divergencia" for p in t.pasos))
     chequeo("max_iter alcanza para las reglas + la entrega en modelos lite",
             capturado.get("max_iter", 0) >= 20, str(capturado.get("max_iter")))
+
+
+FASES_VALIDAS = {"obra_gris", "enchape", "acabados"}
+
+# Un Espacio "completo": TODAS las variables que cualquier ambiente pueda usar,
+# pobladas. Sirve para detectar un typo de variable en una formula del YAML
+# (p.ej. 'metros_lineals') sin que se confunda con una regla que legitimamente
+# no aplica (esa se prueba aparte, con incluye_ducha=False).
+_ESPACIOS_COMPLETOS = {
+    "bano": dict(tipo="bano", largo_m=3, ancho_m=3, altura_enchape_m=2.0,
+                incluye_ducha=True, presupuesto_cop=5_000_000),
+    "cocina": dict(tipo="cocina", largo_m=3, ancho_m=3, altura_enchape_m=2.0,
+                  metros_lineales=4.0, presupuesto_cop=8_000_000),
+    "habitacion": dict(tipo="habitacion", largo_m=4, ancho_m=4,
+                       metros_lineales=3.0, presupuesto_cop=8_000_000),
+    "sala": dict(tipo="sala", largo_m=6, ancho_m=6, presupuesto_cop=15_000_000),
+}
+
+
+def c_reglas_bien_formadas() -> None:
+    """Sin catalogo: valida el YAML mismo. reglas.calcular() convierte un
+    NameError (variable ausente en el Espacio) en ValueError, tratandolo como
+    'la regla no aplica' -- correcto para altura_enchape_m en una sala, pero
+    silencia igual de bien un typo real en la formula (p.ej. escribir
+    'metros_lineals'). Con un Espacio COMPLETO del ambiente (todas las variables
+    pobladas), ese ValueError ya no tiene excusa: si salta, la formula esta mal
+    escrita, no es que el ambiente no use esa variable."""
+    titulo("reglas-formadas", "Cada regla del YAML tiene fase valida y formula sin errores",
+           "data/reglas_obra.yaml")
+    todas = reglas.cargar()
+    for regla_id, r in sorted(todas.items()):
+        chequeo(f"{regla_id}: tiene campo 'fase' valido",
+                r.get("fase") in FASES_VALIDAS, f"fase={r.get('fase')!r}")
+        for tipo in r.get("ambientes") or ["bano"]:
+            e = Espacio(**_ESPACIOS_COMPLETOS[tipo])
+            try:
+                reglas.calcular(regla_id, e)
+                chequeo(f"{regla_id} ({tipo}): formula evalua sin error de variable", True)
+            except ValueError as ex:
+                # legitimo solo si la formula referencia una variable opcional
+                # (incluye_ducha/altura_enchape_m/metros_lineales) que SI esta
+                # poblada aqui: si aun asi falla, es cantidad<=0 con datos
+                # completos, tambien sospechoso, o un typo de nombre de variable.
+                chequeo(f"{regla_id} ({tipo}): formula evalua sin error de variable",
+                        False, str(ex)[:90])
+
+
+def c_reglas_con_datos_reales() -> None:
+    """El chequeo de mayor valor de la expansion a 4 ambientes: para cada regla
+    del YAML, en cada ambiente que declara, su concepto debe resolver a >=1
+    producto real en data/catalogo.db. Sin este chequeo, una regla nueva sin
+    categoria descargada (o con CONCEPTO_A_CATEGORIA/CONCEPTO_FILTROS mal
+    puestos) cae en cot.faltantes EN SILENCIO: es exactamente lo que le paso a
+    'espejo' y 'division de ducha' cuando su categoria (EXTRA) nunca se
+    descargo, y el fixture sintetico los tapaba mientras los datos reales
+    fallaban. Corre solo contra la DB real (no contra el fixture, que por
+    diseno cubre todos los conceptos con 1-2 productos sinteticos)."""
+    titulo("reglas-datos", "Cada regla resuelve a producto real en su ambiente",
+           "data/reglas_obra.yaml + data/catalogo.db")
+    if catalogo.stats().get("productos", 0) == 0:
+        print("  [SALTADO] catalogo vacio")
+        return
+    # Si la DB fue construida desde el fixture (catFIXTURE), este chequeo no
+    # aplica: el fixture es sintetico a proposito y no debe reflejar el catalogo real.
+    con = catalogo._con()
+    n_fixture = con.execute(
+        "SELECT COUNT(*) FROM productos WHERE cat_id='catFIXTURE'").fetchone()[0]
+    con.close()
+    if n_fixture > 0:
+        print("  [SALTADO] catalogo construido desde el fixture sintetico")
+        return
+    todas = reglas.cargar()
+    for regla_id, r in sorted(todas.items()):
+        for tipo in r.get("ambientes") or ["bano"]:
+            cats = CONCEPTO_A_CATEGORIA.get(r["concepto"])
+            g = catalogo.gamas(r["concepto"], cats, unidad_requerida=r["unidad"])
+            chequeo(f"{regla_id} ({tipo}) resuelve producto real",
+                    bool(g), f"concepto='{r['concepto']}' categorias={cats} gamas={sorted(g)}")
 
 
 def c9_fallback_llaves() -> None:
@@ -395,7 +485,11 @@ def c10_llm() -> None:
         return
     from src import qa, supervisor
     print(f"  proveedor={llm.PROVEEDOR} modelos={llm.MODELOS} llaves={len(llm.POOL)}")
-    e = Espacio(largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    # --con-llm se mantiene SOLO en bano: la cuota Gemini del tier gratuito es
+    # 20 requests/dia POR MODELO y esta corrida gasta ~35. Parametrizar esto por
+    # los 4 ambientes cuadruplicaria el gasto la vispera de la demo. Cocina,
+    # habitacion y sala se cubren de forma determinista (c1/c3/c6/c8b + c_reglas_con_datos).
+    e = Espacio(tipo="bano", largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
     cot, traza = supervisor.correr_agentico(e, sesion="prove-llm")
     chequeo("el supervisor produjo cotizacion", cot is not None)
     usos = traza.herramientas_usadas()
@@ -421,7 +515,8 @@ def main() -> int:
         return 1
     for f in (c1_guardrails, c2_retrieval, c3_reglas_sin_aritmetica_del_llm, c4_aislamiento,
               c5_negociacion, c6_autocorreccion, c7_memoria, c8_observabilidad,
-              c8b_cuantificador_no_transcribe, c9_fallback_llaves):
+              c8b_cuantificador_no_transcribe, c_reglas_bien_formadas,
+              c_reglas_con_datos_reales, c9_fallback_llaves):
         f()
     if a.con_llm:
         c10_llm()

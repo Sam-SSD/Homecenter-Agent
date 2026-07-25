@@ -1,8 +1,9 @@
-# Cotizador de remodelación de baño — Homecenter
+# Cotizador de remodelación — Homecenter
 
 Sistema agéntico que cuantifica materiales de obra contra las guías técnicas
 publicadas por Homecenter, busca productos reales en su catálogo, y **negocia
 recortes cuando no alcanza el presupuesto** en vez de complacer al usuario.
+Cubre cuatro ambientes: baño, cocina, habitación y sala.
 
 AgentSprint by ReshapeX · Universidad EAFIT · Medellín · 25 de julio de 2026
 
@@ -53,9 +54,18 @@ cada paso.** No usa red.
 ### Paso 2 — descargar (el único paso que usa red)
 
 ```powershell
-.venv\Scripts\python -m ingest.fetch_all --etapa 1    # 3 categorías, ~27 páginas
-.venv\Scripts\python -m ingest.fetch_all --etapa 2    # las 14 del núcleo + 6 de guías
-.venv\Scripts\python -m ingest.fetch_all --etapa 3    # las 5 opcionales
+.venv\Scripts\python -m ingest.fetch_all --ambiente bano
+.venv\Scripts\python -m ingest.fetch_all --ambiente cocina
+.venv\Scripts\python -m ingest.fetch_all --ambiente habitacion
+.venv\Scripts\python -m ingest.fetch_all --ambiente sala
+# o los 4 de una vez:
+.venv\Scripts\python -m ingest.fetch_all --ambiente todos
+```
+
+Antes de lanzar, estima cuántos requests toma (cero red):
+
+```powershell
+.venv\Scripts\python -m ingest.fetch_all --ambiente cocina --estimar
 ```
 
 Lanza **uno solo a la vez**. Dos procesos en paralelo duplican la tasa de requests
@@ -105,28 +115,23 @@ Imprime conteo y rango de precios por categoría, precios sospechosos y porcenta
 de unidad incierta. **Abre a mano los 3 links que imprime al final y compara el
 precio.** Eso es lo que separa un dataset real de uno que parece real.
 
-### Paso 6 — semilla versionada
+### Paso 6 — probar el sistema
 
 ```powershell
-.venv\Scripts\python -m ingest.make_seed
+.venv\Scripts\python -m evals.prove              # nucleo determinista, sin API key
+.venv\Scripts\python -m evals.prove --con-llm    # + los 3 loops agenticos (solo bano, cuota limitada)
+.venv\Scripts\python run.py --tipo bano --largo 2 --ancho 2 --presupuesto 2000000
+.venv\Scripts\python run.py --tipo cocina --largo 3 --ancho 2.5 --presupuesto 8000000 --deterministico
 ```
 
-Crea `data/muestra.json` con ~25 productos. Este sí va al repo, para que los evals
-corran en cualquier máquina sin redistribuir el catálogo completo.
+Los evals sin red usan `evals/fixture_productos.json` (trackeado en el repo, con
+productos sintéticos de los 4 ambientes) si no hay `data/catalogo.db` construido
+desde datos reales todavía.
 
-### Paso 7 — probar el sistema
-
-```powershell
-.venv\Scripts\python -m evals.prove              # 8 componentes, sin API key
-.venv\Scripts\python -m evals.prove --con-llm    # incluye los 3 loops agénticos
-.venv\Scripts\python run.py --largo 2 --ancho 2 --presupuesto 2000000
-.venv\Scripts\python run.py --largo 2 --ancho 2 --presupuesto 2000000 --deterministico
-```
-
-### Paso 8 — la mañana del evento, desde EAFIT
+### Paso 7 — la mañana del evento, desde EAFIT
 
 ```powershell
-.venv\Scripts\python -m ingest.healthcheck       # ¿la red de EAFIT permite el PDP?
+.venv\Scripts\python -m ingest.healthcheck       # ¿la red de EAFIT permite el PDP? (bano)
 .venv\Scripts\streamlit run app.py
 ```
 
@@ -138,16 +143,14 @@ Qué pasa si vuelves a lanzar cada paso:
 
 | Comando | Reanuda | Qué hace exactamente |
 |---|---|---|
-| `fetch_all --etapa N` | **Sí** | Si el HTML ya está en cache, **cero requests**. Solo baja lo que falta. Verificado: 132 páginas en cache → 1,5 s y 0 descargas nuevas. |
+| `fetch_all --ambiente X` | **Sí** | Si el HTML ya está en cache, **cero requests**. Solo baja lo que falta. |
 | `fetch_all --force` | **No** | Re-descarga todo. Úsalo solo para refrescar precios. |
 | `parse_all` | Re-deriva | Reescribe los dos JSON desde el cache completo. No pierde nada porque el cache es la fuente. |
 | `build_index` | Reconstruye | `DROP TABLE` y vuelve a llenar desde el JSON. Seguro: todo es derivado. |
 | `sanity`, `estado`, `probar_parser` | Solo lectura | No escriben nada. |
-| `make_seed` | Sobrescribe | Regenera `data/muestra.json`. |
 
 **Lo único que nunca hay que borrar es `cache/`.** Todo lo demás se regenera desde
-ahí sin volver a tocar el sitio. Si borras `cache/`, tienes que re-descargar las
-132 páginas.
+ahí sin volver a tocar el sitio.
 
 Detalles de robustez en `ingest/fetch.py`:
 
@@ -219,14 +222,14 @@ audita.
 
 | # | Componente | Archivo | Cómo se demuestra |
 |---|---|---|---|
-| 1 | Guardrails de entrada | `src/schemas.py` | rechaza $200.000 y un baño de 36 m² antes de gastar una llamada al LLM |
+| 1 | Guardrails de entrada | `src/schemas.py` | rechaza $200.000 y un baño de 36 m² antes de gastar una llamada al LLM; los límites de área/lado/presupuesto son por ambiente (`LIMITES`) |
 | 2 | Retrieval y grounding | `src/catalogo.py` | SQL + FTS5 sobre datos reales; toda cifra con SKU y URL |
-| 3 | Cuantificación auditable | `src/reglas.py` | fórmula sustituida en cada requerimiento; el LLM no calcula |
+| 3 | Cuantificación auditable | `src/reglas.py` | fórmula sustituida en cada requerimiento; el LLM no calcula; reglas filtradas por ambiente |
 | 4 | Multi-agente aislado | `src/subagentes.py`, `src/tools.py` | el Cuantificador no tiene ninguna herramienta que devuelva precios |
-| 5 | Negociación bajo restricción | `src/negociador.py` | recortes explicados en pesos, 93–96% de uso del tope |
-| 6 | Auto-corrección | `src/verificador.py` | atrapa SKU inventado, aritmética alterada y omisión de esenciales |
+| 5 | Negociación bajo restricción | `src/negociador.py` | recortes explicados en pesos; fases de obra por el campo `fase` de cada regla |
+| 6 | Auto-corrección | `src/verificador.py` | atrapa SKU inventado, aritmética alterada y omisión de esenciales (por ambiente) |
 | 7 | Memoria de sesión | `src/memoria.py` | el 2º turno sube el tope y no re-cuantifica |
-| 8 | Observabilidad | `src/traza.py`, `evals/` | `python -m evals.prove` → 34 chequeos |
+| 8 | Observabilidad | `src/traza.py`, `evals/` | `python -m evals.prove` → 90 chequeos, incluido uno que verifica que cada regla resuelve a producto real en su ambiente |
 
 `python -m evals.prove` imprime cada componente haciendo su trabajo, con el
 archivo donde vive. Es la respuesta a "¿esto está mockeado?".
@@ -250,15 +253,16 @@ El catálogo **no** va en base vectorial y es a propósito: un embedding no resp
 datos con precios y atributos → consulta.
 
 ### Respeto al sitio
-`ingest/robots.txt` es la copia revisada antes del primer request.
+`ingest/robots_homecenter_2026-07-24.txt` es la copia revisada antes del primer request.
 `ingest/fetch.py:permitido()` bloquea las rutas con `Disallow`, incluido el
 comodín `/*N-*`. Delay de 1.8 s, `Session` única, User-Agent honesto y sin
 rotación. Ante un 403 el scraper se detiene: no evade controles.
 
 ### Qué se versiona y qué no
-`data/muestra.json` (semilla de ~25 productos) **sí** va al repo, para que los
-evals corran en cualquier máquina. El snapshot completo **no**: se regenera con
-`python -m ingest.fetch_all && python -m ingest.parse_all`.
+`evals/fixture_productos.json` (productos sintéticos de los 4 ambientes) **sí**
+va al repo, para que los evals corran en cualquier máquina sin red. El snapshot
+completo (`data/productos.json`, `data/guias.json`, `data/catalogo.db`) **no**:
+se regenera con `python -m ingest.fetch_all --ambiente <X> && python -m ingest.parse_all`.
 
 ## Limitaciones conocidas
 
@@ -273,5 +277,13 @@ evals corran en cualquier máquina. El snapshot completo **no**: se regenera con
   `unidad_incierta` y el Verificador lo reporta.
 - `src/supervisor.py:correr_deterministico` ejecuta los mismos pasos sin el loop
   LLM. Existe como red de seguridad para la demo y está declarado, no escondido.
-- Alcance deliberado: un solo espacio (baño). El motor no cambia para cocina;
-  cambian las categorías y las reglas.
+- Cuatro ambientes (baño, cocina, habitación, sala). El motor no cambia entre
+  ellos: cambian las categorías (`data/categorias.py`), las reglas de obra
+  (`data/reglas_obra.yaml`, campo `ambientes`) y los límites de guardrail
+  (`src/schemas.py:LIMITES`). El esquema de `data/catalogo.db` es el mismo para
+  los 4: el ambiente vive en el mapeo concepto→categoría, no en la fila de
+  producto (una categoría como `pisos_ceramicos` se vende para varios ambientes).
+- `--con-llm` de `evals/prove.py` se mantiene solo en baño: la cuota Gemini del
+  tier gratuito es 20 requests/día **por modelo**, y esta corrida gasta ~35.
+  Cocina, habitación y sala se cubren con los chequeos deterministas (incluido
+  el que verifica que cada regla resuelve a producto real en su ambiente).

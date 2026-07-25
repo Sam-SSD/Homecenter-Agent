@@ -23,12 +23,19 @@ class Traza:
     def hubo_autocorreccion(self) -> bool:
         return any(p["tipo"] == "rechazo" for p in self.pasos)
 
-    def guardar(self, carpeta: str = "trazas") -> str:
-        pathlib.Path(carpeta).mkdir(exist_ok=True)
-        ruta = f"{carpeta}/{self.id}.json"
+    def guardar(self, carpeta: str = "trazas", maximo: int = 200) -> str:
+        """Guarda y rota: conserva solo las `maximo` mas recientes. trazas/ no
+        tiene limite propio y crece indefinidamente corrida tras corrida; esto
+        evita que una tarde de demos deje miles de JSON sueltos."""
+        carpeta_p = pathlib.Path(carpeta)
+        carpeta_p.mkdir(exist_ok=True)
+        ruta = carpeta_p / f"{self.id}.json"
         json.dump({"id": self.id, "pasos": self.pasos},
                   open(ruta, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        return ruta
+        archivos = sorted(carpeta_p.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        for viejo in archivos[:-maximo]:
+            viejo.unlink(missing_ok=True)
+        return str(ruta)
 
     def resumen(self) -> dict:
         return {

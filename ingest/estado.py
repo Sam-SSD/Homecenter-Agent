@@ -9,7 +9,7 @@ from __future__ import annotations
 import json, pathlib, sqlite3, sys
 from bs4 import BeautifulSoup
 
-from data.categorias import NUCLEO, EXTRA, SOLO_GUIA
+from data.categorias import AMBIENTE_A_CATEGORIAS, PRODUCTOS, SOLO_GUIA
 from ingest.fetch import CACHE, MANIFEST, clave, manifest, url_categoria
 from ingest.parse import descubrir_facetas, leer_html
 
@@ -40,9 +40,8 @@ def main() -> int:
     print("2. PENDIENTE POR DESCARGAR  (por categoria)")
     print("=" * 70)
     pendientes = 0
-    for etiqueta, cats, con_facetas in (("nucleo", NUCLEO, True),
-                                        ("guias", SOLO_GUIA, False),
-                                        ("extra", EXTRA, True)):
+    for etiqueta, cats, con_facetas in (("productos", PRODUCTOS, True),
+                                        ("guias", SOLO_GUIA, False)):
         for cat_id, (nombre, slug) in cats.items():
             base = url_categoria(cat_id, slug)
             if not _cacheada(base):
@@ -60,7 +59,9 @@ def main() -> int:
             print(f"  [{marca}] {nombre:22} {etiqueta:6} "
                   f"{len(facetas) - len(faltan)}/{len(facetas)} facetas")
     print(f"\n  URLs pendientes: {pendientes}"
-          + ("  -> corre: python -m ingest.fetch_all --etapa 2" if pendientes else "  -> nada que bajar"))
+          + ("  -> corre: python -m ingest.fetch_all --ambiente <bano|cocina|habitacion|sala|todos>"
+             if pendientes else "  -> nada que bajar"))
+    print(f"\n  ambientes configurados: {', '.join(AMBIENTE_A_CATEGORIAS.keys())}")
 
     print()
     print("=" * 70)
@@ -68,8 +69,7 @@ def main() -> int:
     print("=" * 70)
     for ruta, desc, comando in (
             ("data/productos.json", "productos parseados", "python -m ingest.parse_all"),
-            ("data/guias.json", "corpus RAG", "python -m ingest.parse_all"),
-            ("data/muestra.json", "semilla versionada", "python -m ingest.make_seed")):
+            ("data/guias.json", "corpus RAG", "python -m ingest.parse_all")):
         p = pathlib.Path(ruta)
         if p.exists():
             try:

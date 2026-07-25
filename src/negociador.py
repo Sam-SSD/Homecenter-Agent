@@ -4,8 +4,15 @@ El LLM decide QUE recortar proponiendo gamas; la aritmetica la hace esto.
 """
 from __future__ import annotations
 import re
+from src import reglas
 from src.schemas import (Cotizacion, Espacio, ItemCotizado, Producto,
                          Requerimiento, unidades_necesarias)
+
+FASES_NOMBRE = {
+    "obra_gris": "Semana 1 - demolicion y obra gris",
+    "enchape": "Semana 2 - enchape",
+    "acabados": "Semana 3 - acabados",
+}
 
 ORDEN_GAMA = ["premium", "media", "economico"]
 
@@ -130,17 +137,18 @@ def armar(espacio: Espacio,
 
 
 def _fases(cot: Cotizacion) -> dict[str, list[str]]:
-    f: dict[str, list[str]] = {
-        "Semana 1 - demolicion y obra gris": [],
-        "Semana 2 - enchape": [],
-        "Semana 3 - acabados": [],
-    }
+    """Agrupa por el campo `fase` de la regla en data/reglas_obra.yaml, no por
+    keywords en el nombre del concepto: eso hacia que todo concepto de un
+    ambiente nuevo (sin 'pegante'/'boquilla'/'ceramica' en el nombre) cayera
+    siempre en 'acabados', y se extiende gratis a ambientes nuevos.
+
+    Carga el YAML UNA vez (no por item): reglas.obtener() dentro del loop haria
+    un read_text + yaml.safe_load por cada item de la cotizacion."""
+    todas = reglas.cargar()
+    f: dict[str, list[str]] = {v: [] for v in FASES_NOMBRE.values()}
     for i in cot.items:
-        c = i.concepto
-        if any(k in c for k in ("pegante", "boquilla")):
-            f["Semana 1 - demolicion y obra gris"].append(c)
-        elif "ceramica" in c:
-            f["Semana 2 - enchape"].append(c)
-        else:
-            f["Semana 3 - acabados"].append(c)
+        regla = todas.get(i.requerimiento.regla_id) or {}
+        clave_fase = regla.get("fase", "acabados")
+        nombre_fase = FASES_NOMBRE.get(clave_fase, FASES_NOMBRE["acabados"])
+        f[nombre_fase].append(i.concepto)
     return {k: v for k, v in f.items() if v}

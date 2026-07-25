@@ -94,7 +94,7 @@ def correr_agentico(espacio: Espacio, sesion: str = "demo",
     traza = traza or Traza("supervisor")
     estado: dict = {}
     memoria.escribir(sesion, "espacio", espacio.model_dump())
-    objetivo = (f"Cotiza este bano dentro del tope.\n"
+    objetivo = (f"Cotiza este {espacio.tipo} dentro del tope.\n"
                 f"Espacio: {json.dumps(espacio.model_dump(), ensure_ascii=False)}")
     loop.correr("supervisor", prompts.SUPERVISOR, objetivo,
                 _tools_supervisor(), _ejecutores(espacio, traza, sesion, estado), traza)

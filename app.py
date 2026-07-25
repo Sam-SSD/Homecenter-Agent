@@ -1,18 +1,19 @@
-﻿"""UI de demo. Sin diseno a proposito: la traza vale mas puntos que el CSS.
+"""UI de demo. Sin diseno a proposito: la traza vale mas puntos que el CSS.
 
   streamlit run app.py
 """
 from __future__ import annotations
-import os
 import streamlit as st
-from pydantic import ValidationError
 
-from src import catalogo, memoria, qa, supervisor, tools, verificador
-from src.schemas import Espacio
+from src import catalogo, memoria, qa, tools, verificador
+from src.ejecutar import construir_espacio, cotizar
+from src.schemas import LIMITES
 from src.traza import Traza
 
-st.set_page_config(page_title="Cotizador de bano - Homecenter", layout="wide")
-st.title("Asistente de remodelacion de bano")
+TITULOS = {"bano": "bano", "cocina": "cocina", "habitacion": "habitacion", "sala": "sala"}
+
+st.set_page_config(page_title="Cotizador de remodelacion - Homecenter", layout="wide")
+st.title("Asistente de remodelacion")
 
 s = catalogo.stats()
 st.caption(f"Catalogo: {s['productos']} productos - {s['guias']} chunks de guia - "
@@ -20,11 +21,27 @@ st.caption(f"Catalogo: {s['productos']} productos - {s['guias']} chunks de guia 
 
 with st.sidebar:
     st.header("El espacio")
-    largo = st.number_input("Largo (m)", 0.8, 6.0, 2.0, 0.1)
-    ancho = st.number_input("Ancho (m)", 0.8, 6.0, 2.0, 0.1)
-    enchape = st.number_input("Altura de enchape (m)", 0.5, 3.0, 2.0, 0.1)
-    ducha = st.checkbox("Tiene ducha", True)
-    presupuesto = st.number_input("Presupuesto (COP)", 500_000, 50_000_000, 2_000_000, 100_000)
+    tipo = st.selectbox("Ambiente", ["bano", "cocina", "habitacion", "sala"],
+                        format_func=lambda t: TITULOS[t])
+    limites = LIMITES[tipo]
+    lado_max = float(limites["lado_max"])
+    largo = st.number_input("Largo (m)", 0.8, lado_max, min(2.0, lado_max), 0.1)
+    ancho = st.number_input("Ancho (m)", 0.8, lado_max, min(2.0, lado_max), 0.1)
+
+    enchape = None
+    ducha = None
+    metros_lineales = None
+    if tipo in ("bano", "cocina"):
+        enchape = st.number_input("Altura de enchape (m)", 0.5, 3.0, 2.0, 0.1)
+    if tipo == "bano":
+        ducha = st.checkbox("Tiene ducha", True)
+    if tipo in ("cocina", "habitacion"):
+        etiqueta = "Meson de cocina (ml)" if tipo == "cocina" else "Closet corrido (ml)"
+        metros_lineales = st.number_input(etiqueta, 0.5, 15.0, 3.0, 0.5)
+
+    presupuesto = st.number_input("Presupuesto (COP)", int(limites["presupuesto_min"]),
+                                  200_000_000, max(2_000_000, int(limites["presupuesto_min"])),
+                                  100_000)
     modo = st.radio("Modo", ["Agentico (3 loops)", "Determinista (respaldo de demo)"], index=0)
     sesion = st.text_input("Sesion", "demo")
     if st.button("Cotizar", type="primary", use_container_width=True):
@@ -46,20 +63,18 @@ with st.sidebar:
                    f"{len(_est['modelos'])} modelos en cadena")
 
 if st.session_state.pop("ejecutar", False):
-    try:
-        espacio = Espacio(largo_m=largo, ancho_m=ancho, altura_enchape_m=enchape,
-                          incluye_ducha=ducha, presupuesto_cop=int(presupuesto))
-    except ValidationError as e:
+    espacio, errores = construir_espacio(
+        tipo=tipo, largo_m=largo, ancho_m=ancho, presupuesto_cop=int(presupuesto),
+        altura_enchape_m=enchape, incluye_ducha=ducha, metros_lineales=metros_lineales)
+    if espacio is None:
         st.error("El guardrail de entrada rechazo estos datos:")
-        for err in e.errors():
-            st.write("-", err["msg"])
+        for msg in errores:
+            st.write("-", msg)
         st.stop()
     traza = Traza("ui")
     with st.spinner("El agente esta trabajando..."):
-        if modo.startswith("Determinista"):
-            cot, traza = supervisor.correr_deterministico(espacio, sesion=sesion, traza=traza)
-        else:
-            cot, traza = supervisor.correr_agentico(espacio, sesion=sesion, traza=traza)
+        cot, traza = cotizar(espacio, sesion=sesion,
+                             deterministico=modo.startswith("Determinista"), traza=traza)
     st.session_state["cot"] = cot
     st.session_state["traza"] = traza
 

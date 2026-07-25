@@ -1,5 +1,6 @@
 - id: demo
   descripcion: el caso de la demo
+  tipo: bano
   largo_m: 2.0
   ancho_m: 2.0
   presupuesto_cop: 2000000
@@ -7,6 +8,7 @@
 
 - id: apretado
   descripcion: bano pequeno con presupuesto justo, debe recortar opcionales
+  tipo: bano
   largo_m: 1.5
   ancho_m: 2.0
   presupuesto_cop: 1200000
@@ -14,6 +16,7 @@
 
 - id: holgado
   descripcion: bano grande con plata, debe mantener gama media y ofrecer upgrades
+  tipo: bano
   largo_m: 3.0
   ancho_m: 2.5
   presupuesto_cop: 6000000
@@ -21,6 +24,7 @@
 
 - id: sin_ducha
   descripcion: media bano, no debe cotizar griferia de ducha
+  tipo: bano
   largo_m: 1.2
   ancho_m: 1.5
   incluye_ducha: false
@@ -29,14 +33,51 @@
 
 - id: presupuesto_irreal
   descripcion: guardrail debe rechazar antes de gastar una llamada al LLM
+  tipo: bano
   largo_m: 2.0
   ancho_m: 2.0
   presupuesto_cop: 200000
   espera: rechazo_guardrail
 
 - id: medidas_absurdas
-  descripcion: guardrail debe rechazar un bano de 36 m2
+  descripcion: guardrail debe rechazar un bano de 36 m2 (excede el area_max de bano)
+  tipo: bano
   largo_m: 6.0
   ancho_m: 6.0
   presupuesto_cop: 5000000
+  espera: rechazo_guardrail
+
+- id: cocina_tipica
+  descripcion: cocina con meson y buen presupuesto
+  tipo: cocina
+  largo_m: 3.0
+  ancho_m: 2.5
+  altura_enchape_m: 1.5
+  metros_lineales: 4.0
+  presupuesto_cop: 8000000
+  espera: aprobada
+
+- id: habitacion_tipica
+  descripcion: habitacion con closet corrido
+  tipo: habitacion
+  largo_m: 4.0
+  ancho_m: 3.5
+  metros_lineales: 3.0
+  presupuesto_cop: 6000000
+  espera: aprobada
+
+- id: sala_grande
+  descripcion: sala de 30 m2, area que en bano seria rechazada por el guardrail
+  tipo: sala
+  largo_m: 6.0
+  ancho_m: 5.0
+  presupuesto_cop: 12000000
+  espera: aprobada
+
+- id: sala_presupuesto_irreal
+  descripcion: guardrail de sala tiene su propio piso de presupuesto, distinto al de bano
+  tipo: sala
+  largo_m: 4.0
+  ancho_m: 4.0
+  presupuesto_cop: 300000
   espera: rechazo_guardrail

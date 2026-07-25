@@ -11,7 +11,7 @@ from ingest.parse import parse_categoria, parse_guias
 def main() -> None:
     entradas = manifest()
     if not entradas:
-        print("cache vacio. Corre primero: python -m ingest.fetch_all --etapa 1")
+        print("cache vacio. Corre primero: python -m ingest.fetch_all --ambiente bano")
         return
     productos, guias, vistos, ids_guia = [], [], set(), set()
     for e in entradas:

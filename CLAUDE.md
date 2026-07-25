@@ -1,7 +1,8 @@
 ﻿# CLAUDE.md â€” contexto para Claude Code
 
 ## QuÃ© es
-Cotizador de remodelaciÃ³n de baÃ±o con productos reales de Homecenter Colombia.
+Cotizador de remodelaciÃ³n con productos reales de Homecenter Colombia. Cubre 4
+ambientes: baÃ±o, cocina, habitaciÃ³n y sala.
 Hackathon AgentSprint by ReshapeX, EAFIT MedellÃ­n, 25-jul-2026, 8:00â€“12:00.
 
 Frase del pitch: **no es un buscador de productos, es un cuantificador de obra que
@@ -51,12 +52,11 @@ python -m src.llm --tools        # + ida y vuelta con herramienta (2 requests, u
 python -m src.llm --modelos      # que modelos soporta tu llave (gratis)
 
 # datos (requiere red; hacerlo la noche anterior)
-python -m ingest.fetch_all --etapa 1                  # 3 categorÃ­as, desbloquea al equipo
-python -m ingest.fetch_all --etapa 2                  # nÃºcleo completo + guÃ­as
+python -m ingest.fetch_all --ambiente bano            # o cocina | habitacion | sala | todos
+python -m ingest.fetch_all --ambiente cocina --estimar  # cuenta requests, cero red
 python -m ingest.parse_all                            # offline, itera aquÃ­
 python -m ingest.build_index
 python -m ingest.sanity                               # QA: abre los 3 links que imprime
-python -m ingest.make_seed                            # data/muestra.json (sÃ­ se commitea)
 python -m ingest.healthcheck                          # correr otra vez 7:45 desde EAFIT
 
 # sin red / sin API key
@@ -66,24 +66,29 @@ python run.py --largo 2 --ancho 2 --presupuesto 2000000 --deterministico
 
 # completo
 python -m evals.prove --con-llm
-python run.py --largo 2 --ancho 2 --presupuesto 2000000
+python run.py --tipo bano --largo 2 --ancho 2 --presupuesto 2000000
 streamlit run app.py
 ```
 
 ## Estado actual
-- NÃºcleo determinista: **funcionando**, 54/54 en `prove.py` contra el fixture.
-- Loops LLM: **probados con llave real**, 58/58 con `--con-llm`. Flujo completo:
-  12 requerimientos â†’ 11 conceptos â†’ $1.995.400 de tope $2.000.000, aprobado
-  por el verificador sin fallas.
+- NÃºcleo determinista: **funcionando**, 90/90 en `prove.py` contra datos reales,
+  para los 4 ambientes (baÃ±o, cocina, habitaciÃ³n, sala).
+- Loops LLM: **probados con llave real** en baÃ±o. `--con-llm` se mantiene solo
+  en baÃ±o por cuota (ver abajo); cocina/habitaciÃ³n/sala se cubren de forma
+  determinista, incluido un chequeo que verifica que cada regla del YAML
+  resuelve a producto real en su ambiente.
 - Cuota Gemini del tier gratuito: **20 requests por dÃ­a y POR MODELO**. Una
   corrida `--con-llm` gasta ~35, asÃ­ que `GEMINI_MODELOS` lleva 4 modelos: el
   fallback por modelo es lo que sostiene el dÃ­a de demo. MÃ¡s llaves = mÃ¡s cupo.
-- `data/catalogo.db` estÃ¡ construido desde `evals/fixture_productos.json`
-  (30 productos sintÃ©ticos). Reconstruir con datos reales cambia todo lo demÃ¡s sin
-  tocar cÃ³digo: el contrato es la base de datos.
-- `data/guias.json` **vacÃ­o**: el corpus RAG sale de `ingest.fetch_all --etapa 2`.
-  Sin Ã©l, `consultar_guia` devuelve "sin fuente verificada" y no se alcanza el
-  nivel 4 de la rÃºbrica.
+- `data/catalogo.db` estÃ¡ construido desde datos reales: 2827 productos en 37
+  categorÃ­as, 231 chunks de guÃ­a, cubriendo los 4 ambientes. El esquema SQL no
+  cambiÃ³ al agregar ambientes (`categoria`/`cat_id` son strings libres): el
+  contrato es la base de datos. `evals/fixture_productos.json` (sintÃ©tico, 4
+  ambientes) sigue disponible para evals sin red vÃ­a `--fuente`.
+- `data/guias.json` tiene 231 chunks reales de las 4 categorÃ­as padre de guÃ­as.
+  Sin fuente verificada en `data/guias.json`, una regla queda `verificada: false`
+  (amarillo en la UI) â€” eso es lo esperado para todo lo que no sea baÃ±o hasta
+  que se scrapeen mÃ¡s guÃ­as de cocina/habitaciÃ³n/sala.
 
 ## Orden de trabajo maÃ±ana
 - 8:00â€“8:20 congelar `src/schemas.py`, repartir archivos sin solaparse

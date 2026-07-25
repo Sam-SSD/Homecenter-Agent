@@ -12,7 +12,7 @@ def cuantificar(espacio: Espacio, traza) -> list[Requerimiento]:
     cantidades para que quepan, y esa cotizacion en obra no alcanza."""
     payload = espacio.sin_presupuesto()
     assert "presupuesto_cop" not in payload, "fuga de presupuesto al Cuantificador"
-    objetivo = ("Cuantifica los materiales para remodelar este bano.\n"
+    objetivo = (f"Cuantifica los materiales para remodelar este {espacio.tipo}.\n"
                 f"Espacio: {json.dumps(payload, ensure_ascii=False)}\n"
                 "Pasa este mismo objeto como argumento `espacio` de calcular_cantidad.")
     # REGLA 1: calcular_cantidad ya devuelve el Requerimiento completo, con la
@@ -32,7 +32,9 @@ def cuantificar(espacio: Espacio, traza) -> list[Requerimiento]:
         return salida
 
     ejecutores = {
-        "listar_reglas": tools.listar_reglas,
+        # el tipo lo inyecta Python, igual que el espacio en calcular_cantidad:
+        # el Cuantificador de un ambiente no debe poder pedir reglas de otro.
+        "listar_reglas": lambda **_: tools.listar_reglas(espacio.tipo),
         "consultar_guia": tools.consultar_guia,
         "calcular_cantidad": _calcular,
         # el payload del LLM se ignora como fuente de cifras: solo dice "ya termine"
@@ -40,7 +42,7 @@ def cuantificar(espacio: Espacio, traza) -> list[Requerimiento]:
             "ok": True, "listados": len(llm.como_lista(requerimientos)),
             "requerimientos": [r.model_dump() for r in calculados.values()]},
     }
-    r = loop.correr("cuantificador", prompts.CUANTIFICADOR, objetivo,
+    r = loop.correr("cuantificador", prompts.cuantificador(espacio.tipo), objetivo,
                     tools.tools_cuantificador(), ejecutores, traza,
                     # los modelos lite llaman calcular_cantidad de a una por turno:
                     # 1 listar + 1 consultar + 12 reglas + la entrega no caben en 14

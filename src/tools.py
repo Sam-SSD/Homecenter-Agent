@@ -24,8 +24,8 @@ def consultar_guia(consulta: str, k: int = 3) -> dict:
     return {"resultados": r}
 
 
-def listar_reglas() -> dict:
-    return {"reglas": reglas.listar()}
+def listar_reglas(tipo: str | None = None) -> dict:
+    return {"reglas": reglas.listar(tipo)}
 
 
 def calcular_cantidad(regla_id: str, espacio: dict) -> dict:

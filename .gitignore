@@ -1,6 +1,7 @@
 ﻿.env
 .env.*
 !.env.example
+*.log
 cache/
 data/productos.json
 data/guias.json

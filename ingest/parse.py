@@ -75,7 +75,13 @@ def enriquecer(p: dict) -> dict:
     else:
         p["unidad"] = "Und"
         cat = p.get("categoria", "")
-        if any(k in cat for k in ("ceramic", "piso", "pared", "adhesivo", "boquilla", "pintura")):
+        # Categorias que se venden por area/peso/volumen y no por unidad: si el
+        # nombre no trajo la cifra, la unidad de venta queda incierta. El resto
+        # (sanitarios, muebles, camas, sofas...) SI se vende por unidad y no
+        # necesita marca: por eso la lista es de acabados que se miden, no un
+        # catch-all por ambiente.
+        if any(k in cat for k in ("ceramic", "pisos", "pared", "adhesivo",
+                                   "boquilla", "pintura", "meson")):
             p["unidad_incierta"] = True
     return p
 

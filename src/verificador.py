@@ -7,6 +7,18 @@ from math import ceil
 from src import catalogo
 from src.schemas import Cotizacion, Falla, unidades_necesarias
 
+# Conceptos que un ambiente no puede omitir. Vacio para habitacion/sala: no hay
+# un analogo del sanitario en esos dos. DEBE co-variar con las lineas de
+# CUANTIFICADOR en src/prompts.py ("Un {tipo} no se remodela sin...") - si se
+# desincronizan, el Cuantificador cree que algo es opcional y el verificador
+# lo rechaza como esencial, y el supervisor gasta sus vueltas en un imposible.
+ESENCIALES_POR_TIPO: dict[str, set[str]] = {
+    "bano": {"sanitario", "ceramica de piso", "pegante para ceramica"},
+    "cocina": {"lavaplatos", "meson de cocina"},
+    "habitacion": set(),
+    "sala": set(),
+}
+
 
 def verificar(cot: Cotizacion) -> list[Falla]:
     fallas: list[Falla] = []
@@ -43,11 +55,12 @@ def verificar(cot: Cotizacion) -> list[Falla]:
                             mensaje=f"total ${cot.total_cop:,} excede el tope "
                                     f"${cot.espacio.presupuesto_cop:,}"))
 
-    esenciales = {"sanitario", "ceramica de piso", "pegante para ceramica"}
+    tipo = cot.espacio.tipo
+    esenciales = ESENCIALES_POR_TIPO.get(tipo, set())
     presentes = {i.concepto for i in cot.items}
     for e in esenciales - presentes:
         fallas.append(Falla(codigo="falta_esencial", concepto=e,
-                            mensaje=f"una remodelacion de bano no puede omitir: {e}"))
+                            mensaje=f"una remodelacion de {tipo} no puede omitir: {e}"))
     return fallas
 
 

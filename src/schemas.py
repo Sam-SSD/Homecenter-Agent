@@ -36,32 +36,53 @@ class Producto(BaseModel):
         return self.m2_por_caja or self.kg_por_bulto or self.rendimiento_m2
 
 
+# Guardrails por tipo de ambiente. area_max/lado_max: una sala o comedor
+# integrado supera legitimamente los 25 m2 y los 8 m de lado de un bano;
+# presupuesto_min: calibrado al item mas barato que ese ambiente no puede
+# omitir (el sanitario para bano, un colchon basico para habitacion, etc).
+LIMITES: dict[str, dict[str, float]] = {
+    "bano":       {"area_max": 25,  "lado_max": 8,  "presupuesto_min": 500_000},
+    "cocina":     {"area_max": 40,  "lado_max": 10, "presupuesto_min": 1_500_000},
+    "habitacion": {"area_max": 45,  "lado_max": 12, "presupuesto_min": 800_000},
+    "sala":       {"area_max": 60,  "lado_max": 14, "presupuesto_min": 1_000_000},
+}
+PRESUPUESTO_MAX = 200_000_000
+
+
 class Espacio(BaseModel):
     """GUARDRAIL: rechaza medidas y presupuestos incoherentes."""
-    tipo: Literal["bano"] = "bano"
-    largo_m: float = Field(gt=0.6, lt=8, description="metros")
-    ancho_m: float = Field(gt=0.6, lt=8, description="metros")
+    tipo: Literal["bano", "cocina", "habitacion", "sala"]
+    largo_m: float = Field(gt=0.6, lt=14, description="metros")
+    ancho_m: float = Field(gt=0.6, lt=14, description="metros")
     altura_m: float = Field(default=2.4, gt=1.8, lt=4.5)
-    altura_enchape_m: float = Field(default=2.0, gt=0.3, lt=4.5)
-    incluye_ducha: bool = True
+    altura_enchape_m: Optional[float] = Field(default=None, gt=0.3, lt=4.5)
+    incluye_ducha: Optional[bool] = None
     puertas: int = Field(default=1, ge=0, le=3)
+    metros_lineales: Optional[float] = Field(default=None, gt=0, lt=20,
+        description="mesón de cocina o closet corrido, cuando aplique")
     presupuesto_cop: int = Field(gt=0)
 
     @field_validator("presupuesto_cop")
     @classmethod
     def _rango_presupuesto(cls, v: int) -> int:
-        if v < 500_000:
-            raise ValueError("presupuesto irreal: menos de $500.000 no cubre ni el sanitario mas economico")
-        if v > 200_000_000:
-            raise ValueError("presupuesto fuera de rango para un bano")
+        if v > PRESUPUESTO_MAX:
+            raise ValueError("presupuesto fuera de rango")
         return v
 
     @model_validator(mode="after")
     def _coherencia(self) -> "Espacio":
-        if self.area_piso > 25:
-            raise ValueError(f"area de {self.area_piso} m2 no corresponde a un bano")
-        if self.altura_enchape_m > self.altura_m:
-            raise ValueError("la altura de enchape no puede superar la altura del bano")
+        limites = LIMITES[self.tipo]
+        if self.presupuesto_cop < limites["presupuesto_min"]:
+            raise ValueError(
+                f"presupuesto irreal para {self.tipo}: menos de "
+                f"${limites['presupuesto_min']:,} no cubre ni lo mas economico")
+        if self.largo_m > limites["lado_max"] or self.ancho_m > limites["lado_max"]:
+            raise ValueError(f"medida fuera de rango para {self.tipo} "
+                              f"(maximo {limites['lado_max']} m de lado)")
+        if self.area_piso > limites["area_max"]:
+            raise ValueError(f"area de {self.area_piso} m2 no corresponde a {self.tipo}")
+        if self.altura_enchape_m is not None and self.altura_enchape_m > self.altura_m:
+            raise ValueError("la altura de enchape no puede superar la altura del espacio")
         return self
 
     @property
@@ -73,15 +94,24 @@ class Espacio(BaseModel):
         return round(2 * (self.largo_m + self.ancho_m), 2)
 
     def variables(self) -> dict:
-        """Variables disponibles para las formulas de reglas_obra.yaml."""
-        return {
+        """Variables disponibles para las formulas de reglas_obra.yaml. Solo se
+        exponen las que este ambiente realmente usa: altura_enchape_m e
+        incluye_ducha no significan nada en una sala, y aparecer con un valor
+        por defecto haria que una formula de otro ambiente "aplicara" por
+        accidente."""
+        v = {
             "area_piso": self.area_piso,
             "perimetro": self.perimetro,
             "altura_m": self.altura_m,
-            "altura_enchape_m": self.altura_enchape_m,
             "puertas": float(self.puertas),
-            "incluye_ducha": 1.0 if self.incluye_ducha else 0.0,
         }
+        if self.altura_enchape_m is not None:
+            v["altura_enchape_m"] = self.altura_enchape_m
+        if self.incluye_ducha is not None:
+            v["incluye_ducha"] = 1.0 if self.incluye_ducha else 0.0
+        if self.metros_lineales is not None:
+            v["metros_lineales"] = self.metros_lineales
+        return v
 
     def sin_presupuesto(self) -> dict:
         """AISLAMIENTO DE INFORMACION: esto es lo unico que ve el Cuantificador.
@@ -147,7 +177,15 @@ class Cotizacion(BaseModel):
 
 def unidades_necesarias(req: Requerimiento, prod: Producto) -> int:
     """Puente entre cantidad de obra y unidad de venta. Homecenter vende cajas y
-    bultos, no metros cuadrados ni kilos."""
+    bultos, no metros cuadrados ni kilos.
+
+    NOTA: 'ml' (metros lineales, p.ej. meson o closet corrido) y 'Und' caen
+    ambos al fallback final: se compra 1 unidad de venta por cada metro/unidad
+    de obra, salvo que el producto declare su propio contenido por unidad. Si
+    una regla de obra nueva necesita otro tipo de conversion (p.ej. metros
+    lineales por modulo de mueble), hay que declararla aqui explicitamente:
+    el fallback silencioso es exactamente el bug que tuvieron 'espejo' y
+    'division de ducha' cuando su categoria no tenia filas."""
     contenido = None
     if req.unidad == "m2":
         contenido = prod.m2_por_caja

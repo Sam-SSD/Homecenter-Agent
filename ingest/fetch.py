@@ -1,8 +1,9 @@
 """Descarga con cache en disco. Separa red de parseo: se descarga una vez y
 se parsea veinte. Reanudable: si el run se corta, solo baja lo que falta.
 
-Respeta robots.txt de homecenter.com.co (revisado 24-jul-2026, copia en
-ingest/robots.txt). PROHIBIDOS refleja los Disallow que aplican a user-agent: *.
+Respeta robots.txt de homecenter.com.co (revisado 24-jul-2026, copia real en
+ingest/robots_homecenter_2026-07-24.txt; ingest/robots_notas.md es el resumen
+manual). PROHIBIDOS refleja los Disallow que aplican a user-agent: *.
 """
 from __future__ import annotations
 import hashlib, json, pathlib, time
