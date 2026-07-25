@@ -20,6 +20,15 @@ from dominio.nucleo import candidatos_de, cotizar, requerimientos_de
 
 OK, NO = "  [OK]", "  [FALLA]"
 resultados: list[tuple[str, bool]] = []
+# Un chequeo saltado no es una falla (no cambia el exit code) pero TAMPOCO es
+# verde: sin esto, "148/148 en verde" podia significar que el chequeo mas
+# importante estaba desactivado y nadie lo notaba en el resumen.
+saltados: list[str] = []
+
+
+def saltar(nombre: str, motivo: str) -> None:
+    print(f"  [SALTADO] {nombre} -> {motivo}")
+    saltados.append(f"{nombre} ({motivo})")
 
 
 def espacio_bano(**over) -> Espacio:
@@ -75,6 +84,16 @@ def c2_retrieval() -> None:
             isinstance(catalogo.buscar('sanitario "one-piece" (30.5)', k=2), list))
     chequeo("filtro estructurado por precio",
             all(p.precio <= 300_000 for p in catalogo.buscar("sanitario", precio_max=300_000, k=5)))
+    # El SKU sale de la busqueda, no hardcodeado: la DB cambia entre el fixture
+    # y los datos reales. `specs` puede venir vacio si aun no se parsean, pero
+    # el campo debe existir y por_sku no debe reventar.
+    if ps:
+        p = catalogo.por_sku(ps[0].sku)
+        chequeo("por_sku() de un SKU real trae el producto con campo specs",
+                p is not None and isinstance(getattr(p, "specs", None), dict),
+                f"{ps[0].sku} -> {len(getattr(p, 'specs', {}) or {})} specs")
+    chequeo("por_sku() de un SKU inexistente devuelve None limpio",
+            catalogo.por_sku("99999999") is None)
 
 
 def c3_reglas_sin_aritmetica_del_llm() -> None:
@@ -108,6 +127,35 @@ def c4_aislamiento() -> None:
     chequeo("el Comprador NO tiene herramientas de cuantificacion",
             "calcular_cantidad" not in nombres_v and "listar_reglas" not in nombres_v,
             f"{sorted(nombres_v)}")
+
+    # Las tools de experto de producto: el Comprador y el Q&A las tienen, el
+    # Cuantificador no (ver specs implica ver precio). Un "no esta en
+    # cuantificador" es trivialmente cierto si la tool no existe en ninguna
+    # lista: por eso se salta ruidosamente en vez de pasar en verde.
+    nombres_qa = {t["name"] for t in tools.tools_qa()} if hasattr(tools, "tools_qa") else set()
+    for nombre in ("ficha_producto", "comparar_productos", "recomendar_por_specs"):
+        if nombre not in nombres_v | nombres_qa:
+            saltar(f"aislamiento de {nombre}", "la herramienta aun no existe en ninguna lista")
+            continue
+        chequeo(f"{nombre}: la tiene el Comprador y el Q&A, NO el Cuantificador",
+                nombre not in nombres_c and nombre in nombres_v and nombre in nombres_qa,
+                f"cuantificador={nombre in nombres_c} comprador={nombre in nombres_v} "
+                f"qa={nombre in nombres_qa}")
+
+    # B1: el default de presupuesto sale del tipo, no de una constante fija.
+    # Con 1_000_000 fijo, cocina (presupuesto_min=1_500_000) lanzaba
+    # ValidationError y la cotizacion agentica de cocina salia en cero.
+    # Pasa por sin_presupuesto(): es el payload real que arma subagentes.py,
+    # no un dict a mano que probaria el fix en abstracto.
+    for _t in ("bano", "cocina", "habitacion", "sala"):
+        _payload = Espacio(tipo=_t, largo_m=3, ancho_m=3,
+                           presupuesto_cop=5_000_000).sin_presupuesto()
+        try:
+            _r = tools.calcular_cantidad("piso_ceramica", _payload)
+            _ok, _det = True, f"{_r['cantidad']} {_r['unidad']}"
+        except Exception as _ex:  # noqa: BLE001
+            _ok, _det = False, f"{type(_ex).__name__}: {_ex}"
+        chequeo(f"calcular_cantidad sin presupuesto no falla en {_t}", _ok, _det)
 
 
 def c5_negociacion() -> None:
@@ -314,7 +362,7 @@ def c_reglas_con_datos_reales() -> None:
     titulo("reglas-datos", "Cada regla resuelve a producto real en su ambiente",
            "config/reglas_obra.yaml + datos/catalogo.db")
     if catalogo.stats().get("productos", 0) == 0:
-        print("  [SALTADO] catalogo vacio")
+        saltar("cada regla resuelve a producto real", "catalogo vacio")
         return
     # Si la DB fue construida desde el fixture (catFIXTURE), este chequeo no
     # aplica: el fixture es sintetico a proposito y no debe reflejar el catalogo real.
@@ -323,7 +371,8 @@ def c_reglas_con_datos_reales() -> None:
         "SELECT COUNT(*) FROM productos WHERE cat_id='catFIXTURE'").fetchone()[0]
     con.close()
     if n_fixture > 0:
-        print("  [SALTADO] catalogo construido desde el fixture sintetico")
+        saltar("cada regla resuelve a producto real",
+               "catalogo construido desde el fixture sintetico")
         return
     todas = reglas.cargar()
     for regla_id, r in sorted(todas.items()):
@@ -549,6 +598,10 @@ def main() -> int:
     print(f"\n{'='*74}\n{len(resultados) - len(malos)}/{len(resultados)} chequeos en verde")
     for n in malos:
         print("  FALLA:", n)
+    if saltados:
+        print(f"\n  /!\\ {len(saltados)} chequeo(s) SALTADO(s) -- NO verificados:")
+        for n in saltados:
+            print("    -", n)
     print("=" * 74)
     return 1 if malos else 0
 

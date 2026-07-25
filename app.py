@@ -148,6 +148,26 @@ with der:
             for p in traza.pasos:
                 st.markdown(_fila_paso(p))
 
+# Fuera de `with izq:` y ANTES del st.stop() de abajo: preguntar por specs o
+# comparar dos SKU es una capacidad independiente de la cotizacion. El
+# st.form evita que un rerun de Streamlit (cualquier otro widget) vuelva a
+# disparar qa.responder() y queme cuota de LLM sin pregunta nueva.
+with izq:
+    st.subheader("Pregunta lo que quieras")
+    st.caption("Funciona sin cotizar: puedes preguntar por specs de un SKU o "
+               "comparar dos productos.")
+    with st.form("form_qa"):
+        q = st.text_input("Escribe tu pregunta sobre la cotización o sobre un producto")
+        enviado = st.form_submit_button("Preguntar")
+    if enviado and q:
+        with st.spinner("Consultando fuentes..."):
+            st.session_state["respuesta_qa"] = qa.responder(q, cot, traza or Traza("qa"))
+    r = st.session_state.get("respuesta_qa")
+    if r:
+        st.write(r["respuesta"])
+        st.caption("Herramientas usadas: " + ", ".join(r["herramientas"][-4:]))
+    st.divider()
+
 with izq:
     if not cot:
         st.info("Define el espacio y el presupuesto en la barra lateral.")
@@ -221,10 +241,3 @@ with izq:
                      + ("" if r.get("en_vivo") else f"  ({r.get('motivo', 'snapshot')})"))
         st.rerun()
 
-    st.subheader("Pregunta lo que quieras")
-    q = st.text_input("Escribe tu pregunta sobre la cotización")
-    if q:
-        with st.spinner("Consultando fuentes..."):
-            r = qa.responder(q, cot, traza or Traza("qa"))
-        st.write(r["respuesta"])
-        st.caption("Herramientas usadas: " + ", ".join(r["herramientas"][-4:]))

@@ -2,7 +2,7 @@
 Un embedding no responde "el mas barato bajo $400.000 en porcelana blanca";
 un WHERE + bm25 si, y es auditable linea por linea."""
 from __future__ import annotations
-import re, sqlite3
+import json, re, sqlite3
 from dominio.schemas import Producto
 
 DB = "datos/catalogo.db"
@@ -24,13 +24,23 @@ def consulta_fts(texto: str) -> str:
 
 
 def _fila_a_producto(r: sqlite3.Row) -> Producto:
-    return Producto(**{k: r[k] for k in r.keys() if k != "unidad_incierta"} |
-                    {"unidad_incierta": bool(r["unidad_incierta"])})
+    cols = set(r.keys())
+    specs_raw = r["specs_json"] if "specs_json" in cols else None
+    try:
+        specs = json.loads(specs_raw) if specs_raw else {}
+    except (TypeError, ValueError):
+        specs = {}
+    datos = {k: r[k] for k in r.keys() if k not in ("unidad_incierta", "specs_json")}
+    datos["unidad_incierta"] = bool(r["unidad_incierta"])
+    datos["specs"] = specs
+    if datos.get("modelo") is None:
+        datos["modelo"] = ""
+    return Producto(**datos)
 
 
 def buscar(consulta: str, categorias: list[str] | None = None,
            precio_max: int | None = None, precio_min: int | None = None,
-           k: int = 8) -> list[Producto]:
+           marca: str | None = None, k: int = 8) -> list[Producto]:
     q = consulta_fts(consulta)
     where, params = [], []
     if categorias:
@@ -42,6 +52,9 @@ def buscar(consulta: str, categorias: list[str] | None = None,
     if precio_min:
         where.append("p.precio >= ?")
         params.append(int(precio_min))
+    if marca:
+        where.append("p.marca LIKE ?")
+        params.append(f"%{marca}%")
     filtro = (" AND " + " AND ".join(where)) if where else ""
 
     with _con() as c:
@@ -116,6 +129,29 @@ def gamas(consulta: str, categorias: list[str] | None = None,
     def en(frac: float) -> Producto:
         return ps[min(int(len(ps) * frac), len(ps) - 1)]
     return {"economico": en(0.10), "media": en(0.45), "premium": en(0.85)}
+
+
+def buscar_por_specs(consulta: str, precio_max: int | None = None,
+                      k: int = 30) -> list[Producto]:
+    """Retrieval por specs tecnicas, en tabla FTS SEPARADA de productos_fts:
+    mezclarlas cambiaria el bm25 de buscar()/gamas() y con eso las gamas del
+    negociador (verificado: 10 de 23 reglas cambian de producto elegido)."""
+    q = consulta_fts(consulta)
+    if not q:
+        return []
+    filtro, params = "", []
+    if precio_max:
+        filtro = " AND p.precio <= ?"
+        params.append(int(precio_max))
+    with _con() as c:
+        try:
+            sql = (f"SELECT p.* FROM productos_specs_fts f JOIN productos p ON p.sku = f.sku "
+                   f"WHERE productos_specs_fts MATCH ?{filtro} "
+                   f"ORDER BY bm25(productos_specs_fts) LIMIT ?")
+            filas = c.execute(sql, [q, *params, k]).fetchall()
+        except sqlite3.OperationalError:
+            return []
+    return [_fila_a_producto(r) for r in filas]
 
 
 def buscar_guias(consulta: str, k: int = 3) -> list[dict]:
