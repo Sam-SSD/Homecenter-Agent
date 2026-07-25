@@ -121,13 +121,13 @@ def correr_agentico(espacio: Espacio, sesion: str = "demo",
     memoria.escribir(sesion, "espacio", espacio.model_dump())
     objetivo = (f"Cotiza este {espacio.tipo} dentro del tope.\n"
                 f"Espacio: {json.dumps(espacio.model_dump(), ensure_ascii=False)}")
-    # max_iter=18: el flujo feliz son ~7 llamadas, pero con las 3 vueltas de
-    # verificacion que permite el prompt son ~13, y el default de 14 quedaba
-    # sin margen (visto en demo: el loop murio en el limite sin llamar
-    # armar_presupuesto).
+    # El flujo feliz son ~7 llamadas, pero con las 3 vueltas de verificacion
+    # que permite el prompt son ~13, y el default anterior de 14 quedaba sin
+    # margen (visto en demo: el loop murio en el limite sin llamar
+    # armar_presupuesto). El techo es anti-loop-infinito, no control de gasto.
     loop.correr("supervisor", prompts.SUPERVISOR, objetivo,
                 _tools_supervisor(), _ejecutores(espacio, traza, sesion, estado), traza,
-                max_iter=18)
+                max_iter=30)
     cot = estado.get("cotizacion")
     if cot:
         cot.recalcular()
