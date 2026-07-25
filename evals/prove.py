@@ -489,7 +489,7 @@ def c10_llm() -> None:
     # 20 requests/dia POR MODELO y esta corrida gasta ~35. Parametrizar esto por
     # los 4 ambientes cuadruplicaria el gasto la vispera de la demo. Cocina,
     # habitacion y sala se cubren de forma determinista (c1/c3/c6/c8b + c_reglas_con_datos).
-    e = Espacio(tipo="bano", largo_m=2, ancho_m=2, presupuesto_cop=2_000_000)
+    e = espacio_bano()
     cot, traza = supervisor.correr_agentico(e, sesion="prove-llm")
     chequeo("el supervisor produjo cotizacion", cot is not None)
     usos = traza.herramientas_usadas()

@@ -61,21 +61,16 @@ def main() -> int:
     ap.add_argument("--preguntar", default=None, help="pregunta de seguimiento al Q&A")
     a = ap.parse_args()
 
-    altura_enchape = a.altura_enchape
-    if altura_enchape is None and a.tipo in ("bano", "cocina"):
-        altura_enchape = 2.0
-    incluye_ducha = (not a.sin_ducha) if a.tipo == "bano" else None
-    metros_lineales = a.metros_lineales
-    if metros_lineales is None and a.tipo in ("cocina", "habitacion"):
-        # sin esto, meson_cocina/closet no tienen su variable y la regla no
-        # aplica: el mesón o el closet desaparecen de la cotizacion sin aviso,
-        # y el verificador solo lo atrapa si el concepto es esencial (cocina).
-        metros_lineales = 3.0
+    # Los defaults por ambiente (altura_enchape_m=2.0, metros_lineales=3.0,
+    # incluye_ducha=True) los aplica src.schemas.Espacio (DEFAULTS_POR_TIPO):
+    # una sola fuente de verdad, no duplicada aqui y en app.py. Solo --sin-ducha
+    # necesita forzar un valor explicito, porque es lo opuesto al default.
+    incluye_ducha = False if a.sin_ducha else None
 
     espacio, errores = construir_espacio(
         tipo=a.tipo, largo_m=a.largo, ancho_m=a.ancho, presupuesto_cop=a.presupuesto,
-        altura_enchape_m=altura_enchape, incluye_ducha=incluye_ducha,
-        metros_lineales=metros_lineales)
+        altura_enchape_m=a.altura_enchape, incluye_ducha=incluye_ducha,
+        metros_lineales=a.metros_lineales)
     if espacio is None:
         print("GUARDRAIL rechazo la entrada:")
         for msg in errores:

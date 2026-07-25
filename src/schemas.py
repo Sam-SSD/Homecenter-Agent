@@ -48,6 +48,20 @@ LIMITES: dict[str, dict[str, float]] = {
 }
 PRESUPUESTO_MAX = 200_000_000
 
+# Defaults por tipo para los campos que antes tenian un default global (2.0 de
+# enchape, True de ducha). Sin esto, construir un Espacio de bano sin pasar
+# altura_enchape_m/incluye_ducha explicitos deja esas reglas sin variable y el
+# Cuantificador pierde 3 conceptos (enchape, adhesivo, boquilla) en silencio:
+# le paso exactamente eso al loop LLM real antes de este fix. Va en un
+# validador "before" (no en _coherencia) para que el default exista ANTES de
+# la comparacion altura_enchape_m > altura_m.
+DEFAULTS_POR_TIPO: dict[str, dict] = {
+    "bano": {"altura_enchape_m": 2.0, "incluye_ducha": True},
+    "cocina": {"altura_enchape_m": 2.0, "metros_lineales": 3.0},
+    "habitacion": {"metros_lineales": 3.0},
+    "sala": {},
+}
+
 
 class Espacio(BaseModel):
     """GUARDRAIL: rechaza medidas y presupuestos incoherentes."""
@@ -61,6 +75,16 @@ class Espacio(BaseModel):
     metros_lineales: Optional[float] = Field(default=None, gt=0, lt=20,
         description="mesón de cocina o closet corrido, cuando aplique")
     presupuesto_cop: int = Field(gt=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _aplicar_defaults_por_tipo(cls, data):
+        if not isinstance(data, dict):
+            return data
+        tipo = data.get("tipo")
+        for campo, valor in DEFAULTS_POR_TIPO.get(tipo, {}).items():
+            data.setdefault(campo, valor)
+        return data
 
     @field_validator("presupuesto_cop")
     @classmethod
