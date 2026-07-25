@@ -2,7 +2,7 @@
 Un embedding no responde "el mas barato bajo $400.000 en porcelana blanca";
 un WHERE + bm25 si, y es auditable linea por linea."""
 from __future__ import annotations
-import re, sqlite3
+import json, re, sqlite3
 from dominio.schemas import Producto
 
 DB = "datos/catalogo.db"
@@ -24,13 +24,23 @@ def consulta_fts(texto: str) -> str:
 
 
 def _fila_a_producto(r: sqlite3.Row) -> Producto:
-    return Producto(**{k: r[k] for k in r.keys() if k != "unidad_incierta"} |
-                    {"unidad_incierta": bool(r["unidad_incierta"])})
+    cols = set(r.keys())
+    specs_raw = r["specs_json"] if "specs_json" in cols else None
+    try:
+        specs = json.loads(specs_raw) if specs_raw else {}
+    except (TypeError, ValueError):
+        specs = {}
+    datos = {k: r[k] for k in r.keys() if k not in ("unidad_incierta", "specs_json")}
+    datos["unidad_incierta"] = bool(r["unidad_incierta"])
+    datos["specs"] = specs
+    if datos.get("modelo") is None:
+        datos["modelo"] = ""
+    return Producto(**datos)
 
 
 def buscar(consulta: str, categorias: list[str] | None = None,
            precio_max: int | None = None, precio_min: int | None = None,
-           k: int = 8) -> list[Producto]:
+           marca: str | None = None, k: int = 8) -> list[Producto]:
     q = consulta_fts(consulta)
     where, params = [], []
     if categorias:
@@ -42,6 +52,9 @@ def buscar(consulta: str, categorias: list[str] | None = None,
     if precio_min:
         where.append("p.precio >= ?")
         params.append(int(precio_min))
+    if marca:
+        where.append("p.marca LIKE ?")
+        params.append(f"%{marca}%")
     filtro = (" AND " + " AND ".join(where)) if where else ""
 
     with _con() as c:
@@ -95,27 +108,80 @@ def filtrar_por_concepto(ps: list[Producto], concepto: str) -> list[Producto]:
     return ok or ps
 
 
-def gamas(consulta: str, categorias: list[str] | None = None,
-          unidad_requerida: str | None = None) -> dict[str, Producto]:
-    """Tres opciones por concepto. Es lo que le permite al Negociador recortar.
+def alternativas(consulta: str, categorias: list[str] | None = None,
+                 unidad_requerida: str | None = None, k: int = 200) -> list[Producto]:
+    """Pool completo ordenado por precio para un concepto. Es la fuente tanto
+    de gamas() (que colapsa esto a 3) como del swap manual en la UI (que
+    necesita ver el pool entero, no solo economico/media/premium).
 
     Filtra accesorios por nombre y, cuando la obra se mide en m2/kg/galon,
     prefiere productos que declaren su contenido de venta: si no lo declaran no
-    se puede calcular cuantas cajas comprar."""
-    ps = buscar(consulta, categorias=categorias, k=200)
+    se puede calcular cuantas cajas comprar.
+
+    k=200 no es cosmetico: con k=100 el producto "media" de varios conceptos
+    cambia de SKU (verificado contra las 23 reglas del YAML). No lo bajes sin
+    re-verificar contra pruebas.prove."""
+    ps = buscar(consulta, categorias=categorias, k=k)
     ps = filtrar_por_concepto(ps, consulta)
     if unidad_requerida in ("m2", "kg"):  # galon: la regla ya entrega galones
         con_unidad = [p for p in ps if p.contenido_por_unidad()]
         if con_unidad:
             ps = con_unidad
+    return sorted(ps, key=lambda p: p.precio)
+
+
+def gamas(consulta: str, categorias: list[str] | None = None,
+          unidad_requerida: str | None = None) -> dict[str, Producto]:
+    """Tres opciones por concepto. Es lo que le permite al Negociador recortar."""
+    ps = alternativas(consulta, categorias, unidad_requerida)
     if not ps:
         return {}
-    ps = sorted(ps, key=lambda p: p.precio)
     # Percentiles en vez de min/max: los extremos absolutos suelen ser un
     # accesorio suelto o un producto industrial fuera de contexto.
     def en(frac: float) -> Producto:
         return ps[min(int(len(ps) * frac), len(ps) - 1)]
     return {"economico": en(0.10), "media": en(0.45), "premium": en(0.85)}
+
+
+def opciones(consulta: str, categorias: list[str] | None = None,
+            unidad_requerida: str | None = None, n: int = 20) -> list[Producto]:
+    """n productos repartidos por todo el rango de precio del concepto, para
+    que el usuario elija manualmente. NO son los n mas baratos (eso seria
+    alternativas()[:n]): se muestrea por indice para cubrir economico a
+    premium. Excluye unidad_incierta cuando la obra se mide en m2/kg: esos
+    productos no permiten calcular cuantas cajas/bultos comprar."""
+    ps = alternativas(consulta, categorias, unidad_requerida)
+    if unidad_requerida in ("m2", "kg"):
+        ciertos = [p for p in ps if not p.unidad_incierta]
+        if ciertos:
+            ps = ciertos
+    if len(ps) <= n:
+        return ps
+    idx = sorted({min(int(len(ps) * i / n), len(ps) - 1) for i in range(n)})
+    return [ps[i] for i in idx]
+
+
+def buscar_por_specs(consulta: str, precio_max: int | None = None,
+                      k: int = 30) -> list[Producto]:
+    """Retrieval por specs tecnicas, en tabla FTS SEPARADA de productos_fts:
+    mezclarlas cambiaria el bm25 de buscar()/gamas() y con eso las gamas del
+    negociador (verificado: 10 de 23 reglas cambian de producto elegido)."""
+    q = consulta_fts(consulta)
+    if not q:
+        return []
+    filtro, params = "", []
+    if precio_max:
+        filtro = " AND p.precio <= ?"
+        params.append(int(precio_max))
+    with _con() as c:
+        try:
+            sql = (f"SELECT p.* FROM productos_specs_fts f JOIN productos p ON p.sku = f.sku "
+                   f"WHERE productos_specs_fts MATCH ?{filtro} "
+                   f"ORDER BY bm25(productos_specs_fts) LIMIT ?")
+            filas = c.execute(sql, [q, *params, k]).fetchall()
+        except sqlite3.OperationalError:
+            return []
+    return [_fila_a_producto(r) for r in filas]
 
 
 def buscar_guias(consulta: str, k: int = 3) -> list[dict]:

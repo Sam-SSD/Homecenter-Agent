@@ -11,6 +11,7 @@ DB = "datos/catalogo.db"
 ESQUEMA = """
 DROP TABLE IF EXISTS productos;
 DROP TABLE IF EXISTS productos_fts;
+DROP TABLE IF EXISTS productos_specs_fts;
 DROP TABLE IF EXISTS guias;
 DROP TABLE IF EXISTS guias_fts;
 
@@ -19,13 +20,22 @@ CREATE TABLE productos (
   precio INTEGER, precio_antes INTEGER, unidad TEXT,
   m2_por_caja REAL, kg_por_bulto REAL, rendimiento_m2 REAL,
   unidad_incierta INTEGER DEFAULT 0,
-  url TEXT, imagen_url TEXT, capturado_en TEXT
+  url TEXT, imagen_url TEXT, capturado_en TEXT,
+  specs_json TEXT DEFAULT '{}', rating REAL, total_reviews INTEGER, modelo TEXT
 );
 CREATE INDEX idx_prod_cat ON productos(categoria);
 CREATE INDEX idx_prod_precio ON productos(precio);
 
 CREATE VIRTUAL TABLE productos_fts USING fts5(
   sku UNINDEXED, nombre, marca, categoria,
+  tokenize='unicode61 remove_diacritics 2'
+);
+
+-- Tabla SEPARADA de productos_fts a proposito: mezclar specs con
+-- nombre/marca/categoria cambiaria el bm25 de buscar()/gamas() y con eso
+-- el producto que elige el negociador (verificado: 10 de 23 reglas cambian).
+CREATE VIRTUAL TABLE productos_specs_fts USING fts5(
+  sku UNINDEXED, specs,
   tokenize='unicode61 remove_diacritics 2'
 );
 
@@ -57,18 +67,26 @@ def main() -> None:
     db = sqlite3.connect(DB)
     db.executescript(ESQUEMA)
     for p in productos:
+        specs = p.get("specs") or {}
         db.execute(
             """INSERT OR REPLACE INTO productos VALUES
                (:sku,:nombre,:marca,:categoria,:cat_id,:precio,:precio_antes,:unidad,
                 :m2_por_caja,:kg_por_bulto,:rendimiento_m2,:unidad_incierta,
-                :url,:imagen_url,:capturado_en)""",
+                :url,:imagen_url,:capturado_en,:specs_json,:rating,:total_reviews,:modelo)""",
             {k: p.get(k) for k in
              ("sku", "nombre", "marca", "categoria", "cat_id", "precio", "precio_antes",
               "unidad", "m2_por_caja", "kg_por_bulto", "rendimiento_m2", "url",
-              "imagen_url", "capturado_en")} | {"unidad_incierta": int(p.get("unidad_incierta", False))},
+              "imagen_url", "capturado_en", "rating", "total_reviews")}
+            | {"unidad_incierta": int(p.get("unidad_incierta", False)),
+               "specs_json": json.dumps(specs, ensure_ascii=False),
+               "modelo": p.get("modelo") or ""},
         )
         db.execute("INSERT INTO productos_fts (sku,nombre,marca,categoria) VALUES (?,?,?,?)",
                    (p["sku"], p.get("nombre", ""), p.get("marca", ""), p.get("categoria", "")))
+        if specs:
+            aplanado = " | ".join(f"{k}: {v}" for k, v in specs.items())
+            db.execute("INSERT INTO productos_specs_fts (sku,specs) VALUES (?,?)",
+                       (p["sku"], aplanado))
     for g in guias:
         db.execute("INSERT OR REPLACE INTO guias VALUES (:id,:categoria,:titulo,:texto,:url)", g)
         db.execute("INSERT INTO guias_fts (id,titulo,texto) VALUES (?,?,?)",

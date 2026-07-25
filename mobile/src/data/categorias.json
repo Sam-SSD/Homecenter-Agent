@@ -1,0 +1,634 @@
+{
+ "categorias": {
+  "cat90040": [
+   "sanitarios",
+   [
+    "bano"
+   ]
+  ],
+  "cat90039": [
+   "combos_sanitarios",
+   [
+    "bano"
+   ]
+  ],
+  "cat90041": [
+   "lavamanos",
+   [
+    "bano"
+   ]
+  ],
+  "cat740075": [
+   "muebles_bano",
+   [
+    "bano"
+   ]
+  ],
+  "cat960001": [
+   "muebles_lavamanos",
+   [
+    "bano"
+   ]
+  ],
+  "cat740062": [
+   "griferia_lavamanos",
+   [
+    "bano"
+   ]
+  ],
+  "cat740061": [
+   "griferia_ducha",
+   [
+    "bano"
+   ]
+  ],
+  "cat5070016": [
+   "pisos_bano",
+   [
+    "bano"
+   ]
+  ],
+  "cat40494992": [
+   "paredes_ceramicas",
+   [
+    "bano",
+    "cocina"
+   ]
+  ],
+  "cat660036": [
+   "adhesivo_ceramica",
+   [
+    "bano",
+    "cocina"
+   ]
+  ],
+  "cat660038": [
+   "boquilla",
+   [
+    "bano",
+    "cocina"
+   ]
+  ],
+  "cat10494": [
+   "pintura_antihongos",
+   [
+    "bano",
+    "cocina"
+   ]
+  ],
+  "cat1900001": [
+   "divisiones_bano",
+   [
+    "bano"
+   ]
+  ],
+  "cat740074": [
+   "duchas_electricas",
+   [
+    "bano"
+   ]
+  ],
+  "cat740077": [
+   "espejos_bano",
+   [
+    "bano"
+   ]
+  ],
+  "cat740079": [
+   "accesorios_bano",
+   [
+    "bano"
+   ]
+  ],
+  "cat740063": [
+   "columnas_ducha",
+   [
+    "bano"
+   ]
+  ],
+  "cat1640001": [
+   "pisos_ceramicos",
+   [
+    "bano",
+    "cocina",
+    "habitacion",
+    "sala"
+   ]
+  ],
+  "cat1680181": [
+   "pintura_interior",
+   [
+    "bano",
+    "cocina",
+    "habitacion",
+    "sala"
+   ]
+  ],
+  "cat70008": [
+   "lavaplatos_empotrar",
+   [
+    "cocina"
+   ]
+  ],
+  "cat70010": [
+   "lavaplatos_sobreponer",
+   [
+    "cocina"
+   ]
+  ],
+  "cat740040": [
+   "mesones_cocina",
+   [
+    "cocina"
+   ]
+  ],
+  "cat3260006": [
+   "mesones_granito",
+   [
+    "cocina"
+   ]
+  ],
+  "cat70014": [
+   "muebles_cocina",
+   [
+    "cocina"
+   ]
+  ],
+  "cat5070017": [
+   "pisos_cocina",
+   [
+    "cocina"
+   ]
+  ],
+  "cat10210025": [
+   "griferia_cocina",
+   [
+    "cocina"
+   ]
+  ],
+  "cat660024": [
+   "decorados_cocina",
+   [
+    "cocina"
+   ]
+  ],
+  "cat10308": [
+   "muebles_habitacion",
+   [
+    "habitacion"
+   ]
+  ],
+  "cat1660049": [
+   "camas",
+   [
+    "habitacion"
+   ]
+  ],
+  "cat210003": [
+   "colchones",
+   [
+    "habitacion"
+   ]
+  ],
+  "cat10310": [
+   "closets",
+   [
+    "habitacion"
+   ]
+  ],
+  "cat5070018": [
+   "pisos_habitacion",
+   [
+    "habitacion",
+    "sala"
+   ]
+  ],
+  "cat10332": [
+   "muebles_sala",
+   [
+    "sala"
+   ]
+  ],
+  "cat10334": [
+   "sofas",
+   [
+    "sala"
+   ]
+  ],
+  "cat10342": [
+   "comedores",
+   [
+    "sala"
+   ]
+  ],
+  "cat80006": [
+   "sillas_comedor",
+   [
+    "sala"
+   ]
+  ],
+  "cat9670017": [
+   "iluminacion",
+   [
+    "sala"
+   ]
+  ],
+  "cat70028": [
+   "banos",
+   []
+  ],
+  "cat1770067": [
+   "bano_cocina_aseo",
+   []
+  ],
+  "cat940033": [
+   "pisos_pinturas",
+   []
+  ],
+  "cat40446128": [
+   "sanitarios_combos",
+   []
+  ],
+  "cat40683672": [
+   "griferias_banos",
+   []
+  ],
+  "cat41432114": [
+   "acabados_banos",
+   []
+  ],
+  "cat41432125": [
+   "acabados_cocinas",
+   []
+  ]
+ },
+ "concepto_a_categoria": {
+  "ceramica_piso": [
+   "pisos_bano",
+   "pisos_cocina",
+   "pisos_ceramicos"
+  ],
+  "ceramica_pared": [
+   "paredes_ceramicas"
+  ],
+  "sanitario": [
+   "sanitarios",
+   "combos_sanitarios"
+  ],
+  "lavamanos": [
+   "lavamanos",
+   "muebles_lavamanos"
+  ],
+  "mueble_bano": [
+   "muebles_bano",
+   "muebles_lavamanos"
+  ],
+  "griferia_lavamanos": [
+   "griferia_lavamanos"
+  ],
+  "griferia_ducha": [
+   "griferia_ducha",
+   "columnas_ducha"
+  ],
+  "pegante_ceramica": [
+   "adhesivo_ceramica"
+  ],
+  "boquilla": [
+   "boquilla"
+  ],
+  "pintura": [
+   "pintura_antihongos",
+   "pintura_interior"
+  ],
+  "espejo": [
+   "espejos_bano"
+  ],
+  "lavaplatos": [
+   "lavaplatos_empotrar",
+   "lavaplatos_sobreponer"
+  ],
+  "meson_cocina": [
+   "mesones_cocina",
+   "mesones_granito"
+  ],
+  "mueble_cocina": [
+   "muebles_cocina"
+  ],
+  "griferia_cocina": [
+   "griferia_cocina"
+  ],
+  "cama": [
+   "camas"
+  ],
+  "colchon": [
+   "colchones"
+  ],
+  "closet": [
+   "closets"
+  ],
+  "sofa": [
+   "sofas",
+   "muebles_sala"
+  ],
+  "comedor": [
+   "comedores"
+  ],
+  "silla_comedor": [
+   "sillas_comedor"
+  ],
+  "lampara": [
+   "iluminacion"
+  ]
+ },
+ "filtros": {
+  "ceramica_piso": {
+   "debe": [
+    "piso",
+    "porcelanato",
+    "porcelanico",
+    "baldosa",
+    "ceramica",
+    "laminado"
+   ],
+   "no": [
+    "pared",
+    "muro",
+    "guardaescoba",
+    "listelo",
+    "cenefa",
+    "peldano"
+   ]
+  },
+  "ceramica_pared": {
+   "debe": [
+    "pared",
+    "muro",
+    "revestimiento",
+    "ceramica",
+    "porcelanato"
+   ],
+   "no": [
+    "piso",
+    "guardaescoba",
+    "peldano"
+   ]
+  },
+  "sanitario": {
+   "debe": [
+    "sanitario",
+    "inodoro",
+    "combo"
+   ],
+   "no": [
+    "asiento",
+    "tapa",
+    "repuesto",
+    "valvula",
+    "tanque",
+    "limpiador",
+    "cepillo",
+    "kit"
+   ]
+  },
+  "lavamanos": {
+   "debe": [
+    "lavamanos",
+    "lavabo"
+   ],
+   "no": [
+    "griferia",
+    "grifo",
+    "sifon",
+    "desague",
+    "repuesto",
+    "mueble",
+    "espejo",
+    "kit"
+   ]
+  },
+  "mueble_bano": {
+   "debe": [
+    "mueble",
+    "gabinete",
+    "vanitorio"
+   ],
+   "no": [
+    "repuesto",
+    "bisagra",
+    "herraje",
+    "correder"
+   ]
+  },
+  "griferia_lavamanos": {
+   "debe": [
+    "griferia",
+    "grifo",
+    "monomando",
+    "monocontrol",
+    "mezclador",
+    "llave"
+   ],
+   "no": [
+    "sifon",
+    "desague",
+    "repuesto",
+    "manguera",
+    "acople",
+    "cartucho",
+    "aireador"
+   ]
+  },
+  "griferia_ducha": {
+   "debe": [
+    "griferia",
+    "grifo",
+    "monomando",
+    "mezclador",
+    "ducha",
+    "regadera",
+    "columna",
+    "teleducha"
+   ],
+   "no": [
+    "repuesto",
+    "manguera sola",
+    "cartucho",
+    "cortina",
+    "tapete"
+   ]
+  },
+  "pegante_ceramica": {
+   "debe": [
+    "pegante",
+    "adhesivo",
+    "mortero"
+   ],
+   "no": [
+    "silicona",
+    "sellante",
+    "limpiador"
+   ]
+  },
+  "boquilla": {
+   "debe": [
+    "boquilla",
+    "fragua",
+    "pastina",
+    "junta"
+   ],
+   "no": [
+    "limpiador",
+    "aplicador",
+    "pistola"
+   ]
+  },
+  "pintura": {
+   "debe": [
+    "pintura",
+    "vinilo",
+    "esmalte"
+   ],
+   "no": [
+    "brocha",
+    "rodillo",
+    "bandeja",
+    "cinta",
+    "lija",
+    "removedor",
+    "thinner",
+    "estuco"
+   ]
+  },
+  "espejo": {
+   "debe": [
+    "espejo"
+   ],
+   "no": [
+    "repuesto",
+    "adhesivo"
+   ]
+  },
+  "lavaplatos": {
+   "debe": [
+    "lavaplatos",
+    "lavaplato"
+   ],
+   "no": [
+    "griferia",
+    "grifo",
+    "repuesto",
+    "sifon"
+   ]
+  },
+  "meson_cocina": {
+   "debe": [
+    "meson"
+   ],
+   "no": [
+    "repuesto",
+    "soporte solo"
+   ]
+  },
+  "mueble_cocina": {
+   "debe": [
+    "mueble",
+    "gabinete",
+    "modulo"
+   ],
+   "no": [
+    "repuesto",
+    "bisagra",
+    "organizador"
+   ]
+  },
+  "griferia_cocina": {
+   "debe": [
+    "griferia",
+    "grifo",
+    "monomando",
+    "mezclador"
+   ],
+   "no": [
+    "sifon",
+    "desague",
+    "repuesto"
+   ]
+  },
+  "cama": {
+   "debe": [
+    "cama",
+    "base cama",
+    "espaldar"
+   ],
+   "no": [
+    "repuesto",
+    "sabana",
+    "cobija"
+   ]
+  },
+  "colchon": {
+   "debe": [
+    "colchon"
+   ],
+   "no": [
+    "protector",
+    "funda",
+    "repuesto"
+   ]
+  },
+  "closet": {
+   "debe": [
+    "closet",
+    "armario"
+   ],
+   "no": [
+    "organizador",
+    "repuesto",
+    "herraje"
+   ]
+  },
+  "sofa": {
+   "debe": [
+    "sofa",
+    "poltrona"
+   ],
+   "no": [
+    "repuesto",
+    "funda",
+    "cojin"
+   ]
+  },
+  "comedor": {
+   "debe": [
+    "comedor",
+    "mesa"
+   ],
+   "no": [
+    "repuesto",
+    "mantel",
+    "individual"
+   ]
+  },
+  "silla_comedor": {
+   "debe": [
+    "silla"
+   ],
+   "no": [
+    "repuesto",
+    "cojin",
+    "funda"
+   ]
+  },
+  "lampara": {
+   "debe": [
+    "lampara",
+    "luminaria",
+    "bombillo"
+   ],
+   "no": [
+    "repuesto",
+    "pantalla sola"
+   ]
+  }
+ }
+}

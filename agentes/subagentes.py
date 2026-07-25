@@ -65,6 +65,9 @@ def comprar(requerimientos: list[Requerimiento], traza) -> dict[str, dict[str, P
                 f"Requerimientos: {json.dumps(pedido, ensure_ascii=False)}")
     ejecutores = {
         "buscar_catalogo": tools.buscar_catalogo,
+        "ficha_producto": tools.ficha_producto,
+        "comparar_productos": tools.comparar_productos,
+        "recomendar_por_specs": tools.recomendar_por_specs,
         "validar_en_vivo": tools.validar_en_vivo,
         "entregar_candidatos": lambda candidatos=None, justificaciones=None, sin_candidatos=None, **_: {
             "ok": True, "candidatos": llm.como_dict(candidatos),
